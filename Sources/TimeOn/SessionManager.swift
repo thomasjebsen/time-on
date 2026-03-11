@@ -91,15 +91,14 @@ final class SessionManager {
             totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
         }
         isIdle = true
+        endCurrentSession()
     }
 
     func handleWake() {
-        guard enabled, sessionStart != nil else { return }
-        // After waking, treat as returning from idle — save accumulated time
-        // and let the tick() idle detection decide when to start fresh
-        lastActiveTime = Date()
-        lastReminderTime = Date()
+        guard enabled else { return }
         isIdle = false
+        startNewSession()
+        onSessionStateChanged?()
     }
 
     func resetSession() {
@@ -127,24 +126,23 @@ final class SessionManager {
 
         if idleSeconds >= idleThreshold {
             if !isIdle {
-                // Transition to idle: save active time up to now
-                let now = Date()
-                totalActiveSeconds += now.timeIntervalSince(lastActiveTime)
+                // Transition to idle: end current session, start fresh on return
+                totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
                 isIdle = true
-                saveSession()
+                endCurrentSession()
             }
         } else {
             if isIdle {
-                // Transition from idle to active: start a new active segment
+                // Returning from idle: start a brand new session
                 isIdle = false
-                lastActiveTime = Date()
-                lastReminderTime = Date()
+                startNewSession()
+                onSessionStateChanged?()
             }
         }
 
         let elapsed: TimeInterval
         if isIdle {
-            elapsed = totalActiveSeconds
+            elapsed = 0
         } else {
             elapsed = totalActiveSeconds + Date().timeIntervalSince(lastActiveTime)
         }

@@ -6,7 +6,7 @@ A lightweight macOS menu bar app that tracks your active screen time and keeps y
 
 **Screen time tracking**
 - Shows your active session time right in the menu bar
-- Idle detection — automatically pauses when you step away
+- Idle detection — automatically resets when you step away
 - Sleep/wake and screen lock awareness
 - Break reminders at configurable intervals
 - Session history with stats (daily averages, totals)
