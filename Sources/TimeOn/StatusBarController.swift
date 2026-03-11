@@ -110,7 +110,7 @@ final class StatusBarController: NSObject {
         let menu = NSMenu()
 
         // — Current Session —
-        addSectionHeader("Current Session", to: menu)
+        addSectionHeader("Current session", to: menu)
         if let startTime = sessionManager.sessionStartTime {
             addInfoLine("Started at \(timeFormatter.string(from: startTime))", to: menu)
         } else {
@@ -122,14 +122,14 @@ final class StatusBarController: NSObject {
         // — Previous Session —
         if let prevStart = sessionManager.previousSessionStart,
            let prevEnd = sessionManager.previousSessionEnd {
-            addSectionHeader("Previous Session", to: menu)
+            addSectionHeader("Previous session", to: menu)
             addInfoLine(sessionManager.formatTimeLong(sessionManager.previousSessionDuration), to: menu)
             addInfoLine("\(timeFormatter.string(from: prevStart))\u{2009}–\u{2009}\(timeFormatter.string(from: prevEnd))", to: menu)
             menu.addItem(NSMenuItem.separator())
         }
 
         // — Total Today —
-        addSectionHeader("Total Today", to: menu)
+        addSectionHeader("Total today", to: menu)
         let todaySeconds = sessionManager.todayTotalSeconds + sessionManager.currentSessionSeconds
         addInfoLine(sessionManager.formatTimeLong(todaySeconds), to: menu)
 
@@ -174,12 +174,12 @@ final class StatusBarController: NSObject {
         menu.addItem(NSMenuItem.separator())
 
         // — Session controls —
-        let resetItem = NSMenuItem(title: "Reset Timer", action: #selector(resetTimer), keyEquivalent: "")
+        let resetItem = NSMenuItem(title: "Reset timer", action: #selector(resetTimer), keyEquivalent: "")
         resetItem.target = self
         menu.addItem(resetItem)
 
         if sessionManager.canContinueLastSession {
-            let continueItem = NSMenuItem(title: "Continue Last Session", action: #selector(continueLastSession), keyEquivalent: "")
+            let continueItem = NSMenuItem(title: "Continue last session", action: #selector(continueLastSession), keyEquivalent: "")
             continueItem.target = self
             menu.addItem(continueItem)
         }
@@ -196,10 +196,10 @@ final class StatusBarController: NSObject {
 
         let moreItem = NSMenuItem(title: "More", action: nil, keyEquivalent: "")
         let moreSubmenu = NSMenu()
-        let exportJsonItem = NSMenuItem(title: "Export History (JSON)...", action: #selector(exportJSON), keyEquivalent: "")
+        let exportJsonItem = NSMenuItem(title: "Export history (JSON)...", action: #selector(exportJSON), keyEquivalent: "")
         exportJsonItem.target = self
         moreSubmenu.addItem(exportJsonItem)
-        let exportCsvItem = NSMenuItem(title: "Export History (CSV)...", action: #selector(exportCSV), keyEquivalent: "")
+        let exportCsvItem = NSMenuItem(title: "Export history (CSV)...", action: #selector(exportCSV), keyEquivalent: "")
         exportCsvItem.target = self
         moreSubmenu.addItem(exportCsvItem)
         moreItem.submenu = moreSubmenu
@@ -251,7 +251,7 @@ final class StatusBarController: NSObject {
 
     @objc private func activateCustomDuration() {
         let alert = NSAlert()
-        alert.messageText = "Custom Duration"
+        alert.messageText = "Custom duration"
         alert.informativeText = "Enter minutes:"
         alert.addButton(withTitle: "Activate")
         alert.addButton(withTitle: "Cancel")

@@ -17,7 +17,8 @@ final class CaffeineManager {
         if isActive {
             deactivate()
         } else {
-            activate(duration: nil)
+            let mins = Preferences.defaultAwakeDurationMinutes
+            activate(duration: TimeInterval(mins * 60))
         }
     }
 

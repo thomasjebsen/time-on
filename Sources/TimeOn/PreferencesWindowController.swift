@@ -62,7 +62,7 @@ final class PreferencesWindowController: NSWindowController {
         addSeparator(to: stackView)
 
         // — Stay Awake section —
-        addLabel("Stay Awake", weight: .bold, size: 13, to: stackView)
+        addLabel("Stay awake", weight: .bold, size: 13, to: stackView)
 
         stackView.addArrangedSubview(makeRow("Default duration:", fieldValue: "\(Preferences.defaultAwakeDurationMinutes)", tag: 3, suffix: "minutes"))
 
@@ -114,14 +114,14 @@ final class PreferencesWindowController: NSWindowController {
         // — General section —
         addLabel("General", weight: .bold, size: 13, to: stackView)
 
-        let launchCheck = NSButton(checkboxWithTitle: "Launch at Login", target: self, action: #selector(toggleLaunchAtLogin(_:)))
+        let launchCheck = NSButton(checkboxWithTitle: "Launch at login", target: self, action: #selector(toggleLaunchAtLogin(_:)))
         launchCheck.state = LaunchAtLoginManager.isEnabled ? .on : .off
         stackView.addArrangedSubview(launchCheck)
 
         addSeparator(to: stackView)
 
         // Info
-        let info = NSTextField(wrappingLabelWithString: "Left-click the timer to toggle Stay Awake. Right-click for the full menu.")
+        let info = NSTextField(wrappingLabelWithString: "Left-click the timer to toggle stay awake. Right-click for the full menu.")
         info.textColor = .secondaryLabelColor
         info.font = .systemFont(ofSize: 11)
         stackView.addArrangedSubview(info)
