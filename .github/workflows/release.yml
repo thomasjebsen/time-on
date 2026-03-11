@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -36,7 +39,7 @@ jobs:
             ## Install via Homebrew
 
             ```sh
-            brew install --cask thomasjebsen/tap/timeon
+            brew install --cask thomasjebsen/tap/time-on
             ```
 
             Or download `TimeOn.app.zip`, unzip, and move to `/Applications`.
