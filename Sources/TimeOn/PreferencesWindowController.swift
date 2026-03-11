@@ -10,7 +10,7 @@ final class PreferencesWindowController: NSWindowController {
         self.sessionManager = sessionManager
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 500),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -111,6 +111,15 @@ final class PreferencesWindowController: NSWindowController {
 
         addSeparator(to: stackView)
 
+        // — General section —
+        addLabel("General", weight: .bold, size: 13, to: stackView)
+
+        let launchCheck = NSButton(checkboxWithTitle: "Launch at Login", target: self, action: #selector(toggleLaunchAtLogin(_:)))
+        launchCheck.state = LaunchAtLoginManager.isEnabled ? .on : .off
+        stackView.addArrangedSubview(launchCheck)
+
+        addSeparator(to: stackView)
+
         // Info
         let info = NSTextField(wrappingLabelWithString: "Left-click the timer to toggle Stay Awake. Right-click for the full menu.")
         info.textColor = .secondaryLabelColor
@@ -171,6 +180,10 @@ final class PreferencesWindowController: NSWindowController {
         sender.state = .on
         Preferences.awakeIndicatorIndex = sender.tag
         updatePreview()
+    }
+
+    @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
+        LaunchAtLoginManager.setEnabled(sender.state == .on)
     }
 
     @objc private func useCustomIndicator() {

@@ -25,7 +25,7 @@ A lightweight macOS menu bar app that tracks your active screen time and keeps y
 ### Homebrew
 
 ```sh
-brew install --cask time-on
+brew install --cask thomasjebsen/tap/time-on
 ```
 
 ### Build from source
@@ -73,7 +73,7 @@ After launching, Time On appears in your menu bar showing elapsed active time.
 ## Uninstall
 
 ```sh
-brew uninstall --cask time-on
+brew uninstall --cask thomasjebsen/tap/time-on
 # or
 make uninstall
 ```

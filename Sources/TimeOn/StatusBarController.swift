@@ -43,7 +43,7 @@ final class StatusBarController: NSObject {
     private func setupButton() {
         if let button = statusItem.button {
             button.title = "0m"
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
             button.target = self
             button.action = #selector(handleClick)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
