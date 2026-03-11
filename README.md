@@ -49,7 +49,7 @@ make install
 
 After launching, Time On appears in your menu bar showing elapsed active time.
 
-- **Left-click** — toggle Stay Awake on/off
+- **Left-click** — toggle stay awake on/off
 - **Right-click** — open the full menu
 
 ### Menu
@@ -57,18 +57,19 @@ After launching, Time On appears in your menu bar showing elapsed active time.
 - Current session start time
 - Previous session duration and time range
 - Total active time today
-- Stay Awake controls with "Activate For" durations
-- Reset Timer / Continue Last Session
+- Stay awake controls with preset and custom durations
+- Reset timer / continue last session
 - History window with daily breakdown and averages
 - Settings and export options
 
 ### Settings
 
 - Break reminder interval (default: 20 minutes)
-- Idle threshold (default: 5 minutes of inactivity)
+- Reset threshold (default: 5 minutes of inactivity)
 - Show seconds toggle
-- Default Stay Awake duration
+- Default stay awake duration (default: 5 hours)
 - Indicator style picker with custom emoji support
+- Launch at login
 
 ## Uninstall
 

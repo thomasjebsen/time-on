@@ -53,7 +53,7 @@ final class PreferencesWindowController: NSWindowController {
         stackView.addArrangedSubview(reminderCheck)
 
         stackView.addArrangedSubview(makeRow("Remind every:", fieldValue: "\(Preferences.reminderIntervalMinutes)", tag: 1, suffix: "minutes"))
-        stackView.addArrangedSubview(makeRow("Idle after:", fieldValue: "\(Preferences.idleThresholdMinutes)", tag: 2, suffix: "minutes of inactivity"))
+        stackView.addArrangedSubview(makeRow("Reset after:", fieldValue: "\(Preferences.idleThresholdMinutes)", tag: 2, suffix: "minutes of inactivity"))
 
         let secondsCheck = NSButton(checkboxWithTitle: "Show seconds in timer", target: self, action: #selector(toggleSeconds(_:)))
         secondsCheck.state = Preferences.showSeconds ? .on : .off

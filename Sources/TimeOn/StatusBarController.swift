@@ -143,9 +143,14 @@ final class StatusBarController: NSObject {
 
             // Show remaining time
             if let remaining = caffeineManager.remainingSeconds {
-                let mins = remaining / 60
+                let hours = remaining / 3600
+                let mins = (remaining % 3600) / 60
                 let secs = remaining % 60
-                let str = mins > 0 ? "\(mins)m \(secs)s remaining" : "\(secs)s remaining"
+                var parts: [String] = []
+                if hours > 0 { parts.append("\(hours)h") }
+                if mins > 0 { parts.append("\(mins)m") }
+                parts.append("\(secs)s")
+                let str = parts.joined(separator: " ") + " remaining"
                 let infoItem = NSMenuItem(title: "  \(str)", action: nil, keyEquivalent: "")
                 infoItem.isEnabled = false
                 menu.addItem(infoItem)
