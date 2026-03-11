@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: make app
+
+      - name: Create zip
+        run: |
+          cd .build/release
+          zip -r TimeOn.app.zip TimeOn.app
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          SHA=$(shasum -a 256 .build/release/TimeOn.app.zip | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "SHA256: $SHA"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        with:
+          files: .build/release/TimeOn.app.zip
+          body: |
+            ## Install via Homebrew
+
+            ```sh
+            brew install --cask thomasjebsen/tap/timeon
+            ```
+
+            Or download `TimeOn.app.zip`, unzip, and move to `/Applications`.
