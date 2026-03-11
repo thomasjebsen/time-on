@@ -77,7 +77,7 @@ struct Preferences {
     static var defaultAwakeDurationMinutes: Int {
         get {
             let val = defaults.integer(forKey: Key.defaultAwakeDurationMinutes.rawValue)
-            return val > 0 ? val : 60
+            return val > 0 ? val : 300
         }
         set { defaults.set(newValue, forKey: Key.defaultAwakeDurationMinutes.rawValue) }
     }

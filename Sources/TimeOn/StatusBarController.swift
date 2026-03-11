@@ -43,7 +43,7 @@ final class StatusBarController: NSObject {
     private func setupButton() {
         if let button = statusItem.button {
             button.title = "0m"
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
             button.target = self
             button.action = #selector(handleClick)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -137,7 +137,7 @@ final class StatusBarController: NSObject {
 
         // — Caffeine —
         if caffeineManager.isAwake {
-            let item = NSMenuItem(title: "Deactivate Stay Awake", action: #selector(toggleCaffeine), keyEquivalent: "")
+            let item = NSMenuItem(title: "Deactivate stay awake", action: #selector(toggleCaffeine), keyEquivalent: "")
             item.target = self
             menu.addItem(item)
 
@@ -146,13 +146,17 @@ final class StatusBarController: NSObject {
                 let mins = remaining / 60
                 let secs = remaining % 60
                 let str = mins > 0 ? "\(mins)m \(secs)s remaining" : "\(secs)s remaining"
-                addInfoLine(str, to: menu)
+                let infoItem = NSMenuItem(title: "  \(str)", action: nil, keyEquivalent: "")
+                infoItem.isEnabled = false
+                menu.addItem(infoItem)
             } else {
-                addInfoLine("Indefinitely", to: menu)
+                let infoItem = NSMenuItem(title: "  Indefinitely", action: nil, keyEquivalent: "")
+                infoItem.isEnabled = false
+                menu.addItem(infoItem)
             }
         }
 
-        let activateForItem = NSMenuItem(title: "Activate For", action: nil, keyEquivalent: "")
+        let activateForItem = NSMenuItem(title: "Activate stay awake for", action: nil, keyEquivalent: "")
         let activateSubmenu = NSMenu()
         for (index, duration) in CaffeineManager.durations.enumerated() {
             let item = NSMenuItem(title: duration.title, action: #selector(activateForDuration(_:)), keyEquivalent: "")
