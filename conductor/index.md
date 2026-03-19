@@ -14,6 +14,8 @@ Navigation hub for project context.
 ## Active Tracks
 
 - [idle-detection-bug_20260319](./tracks/idle-detection-bug_20260319/index.md) — Idle Detection Unreliable — Timer Resets During Active Use
+- [break-reminder-bug_20260319](./tracks/break-reminder-bug_20260319/index.md) — Break Reminder Never Fires
+- [break-reminder-options_20260319](./tracks/break-reminder-options_20260319/index.md) — Configurable Break Reminder Indicators
 
 ## Getting Started
 

@@ -12,7 +12,10 @@ final class SessionManager {
 
     var idleTimeProvider: () -> TimeInterval = IdleDetector.systemIdleTime
 
-    var onUpdate: ((String, TimeInterval) -> Void)?
+    /// Whether the current session has exceeded the reminder interval.
+    private(set) var isOverdue = false
+
+    var onUpdate: ((String, TimeInterval, Bool) -> Void)?  // (formatted, elapsed, isOverdue)
     var onBreakReminder: (() -> Void)?
     var onSessionStateChanged: (() -> Void)?
 
@@ -109,17 +112,23 @@ final class SessionManager {
         startNewSession()
     }
 
+    func resetBreak() {
+        isOverdue = false
+        lastReminderTime = Date()
+    }
+
     func startNewSession() {
         sessionStart = Date()
         lastActiveTime = Date()
         totalActiveSeconds = 0
         isIdle = false
+        isOverdue = false
         lastReminderTime = Date()
     }
 
     func tick() {
         guard enabled else {
-            onUpdate?(formatTime(0), 0)
+            onUpdate?(formatTime(0), 0, false)
             return
         }
 
@@ -150,26 +159,30 @@ final class SessionManager {
             elapsed = totalActiveSeconds + Date().timeIntervalSince(lastActiveTime)
         }
 
-        let formatted = formatTime(elapsed)
-        onUpdate?(formatted, elapsed)
-
         // Break reminder check
         if Preferences.reminderEnabled && !isIdle {
             let reminderInterval = TimeInterval(Preferences.reminderIntervalMinutes * 60)
             if let lastReminder = lastReminderTime,
                Date().timeIntervalSince(lastReminder) >= reminderInterval {
+                isOverdue = true
                 lastReminderTime = Date()
                 sendBreakReminder(elapsed: elapsed)
                 onBreakReminder?()
             }
         }
+
+        let formatted = formatTime(elapsed)
+        onUpdate?(formatted, elapsed, isOverdue)
     }
 
     private func sendBreakReminder(elapsed: TimeInterval) {
+        guard Preferences.reminderBannerEnabled else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Time for a break"
         content.body = "You've been active for \(formatTime(elapsed)). Consider taking a short break."
-        content.sound = .default
+        // Sound is handled independently by StatusBarController
+        content.sound = nil
 
         let request = UNNotificationRequest(
             identifier: "breakReminder-\(Date().timeIntervalSince1970)",
@@ -310,3 +323,4 @@ enum ExportFormat {
     case json
     case csv
 }
+

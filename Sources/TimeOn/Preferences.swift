@@ -3,7 +3,7 @@ import Foundation
 struct Preferences {
     private static let defaults = UserDefaults.standard
 
-    enum Key: String {
+    enum Key: String, CaseIterable {
         case reminderEnabled
         case reminderIntervalMinutes
         case idleThresholdMinutes
@@ -11,6 +11,19 @@ struct Preferences {
         case awakeIndicatorStyle
         case customAwakeIndicator
         case defaultAwakeDurationMinutes
+        // Break reminder indicators
+        case reminderBannerEnabled
+        case reminderSoundEnabled
+        case reminderSoundName
+        case reminderSoundVolume
+        case reminderShakeEnabled
+        case reminderShakeDuration
+        case reminderShakeUntilClicked
+        // Color indicators
+        case colorBeforeBreakEnabled
+        case colorBeforeBreak
+        case colorAfterBreakEnabled
+        case colorAfterBreak
     }
 
     // Preset indicator styles
@@ -49,13 +62,13 @@ struct Preferences {
     }
 
     static var reminderEnabled: Bool {
-        get { defaults.object(forKey: Key.reminderEnabled.rawValue) as? Bool ?? true }
+        get { defaults.object(forKey: Key.reminderEnabled.rawValue) as? Bool ?? false }
         set { defaults.set(newValue, forKey: Key.reminderEnabled.rawValue) }
     }
 
-    static var reminderIntervalMinutes: Int {
+    static var reminderIntervalMinutes: Double {
         get {
-            let val = defaults.integer(forKey: Key.reminderIntervalMinutes.rawValue)
+            let val = defaults.double(forKey: Key.reminderIntervalMinutes.rawValue)
             return val > 0 ? val : 20
         }
         set { defaults.set(newValue, forKey: Key.reminderIntervalMinutes.rawValue) }
@@ -80,5 +93,93 @@ struct Preferences {
             return val > 0 ? val : 300
         }
         set { defaults.set(newValue, forKey: Key.defaultAwakeDurationMinutes.rawValue) }
+    }
+
+    // MARK: - Break Reminder Indicators
+
+    static var reminderBannerEnabled: Bool {
+        get { defaults.object(forKey: Key.reminderBannerEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.reminderBannerEnabled.rawValue) }
+    }
+
+    static var reminderSoundEnabled: Bool {
+        get { defaults.object(forKey: Key.reminderSoundEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.reminderSoundEnabled.rawValue) }
+    }
+
+    static var reminderSoundName: String {
+        get { defaults.string(forKey: Key.reminderSoundName.rawValue) ?? "Glass" }
+        set { defaults.set(newValue, forKey: Key.reminderSoundName.rawValue) }
+    }
+
+    /// Sound volume 0.0–1.0
+    static var reminderSoundVolume: Float {
+        get {
+            let val = defaults.float(forKey: Key.reminderSoundVolume.rawValue)
+            return val > 0 ? val : 0.5
+        }
+        set { defaults.set(newValue, forKey: Key.reminderSoundVolume.rawValue) }
+    }
+
+    static var reminderShakeEnabled: Bool {
+        get { defaults.object(forKey: Key.reminderShakeEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.reminderShakeEnabled.rawValue) }
+    }
+
+    /// Shake mode: "0.4", "1", "2", "5", or "until_break"
+    static var reminderShakeMode: String {
+        get { defaults.string(forKey: Key.reminderShakeDuration.rawValue) ?? "0.4" }
+        set { defaults.set(newValue, forKey: Key.reminderShakeDuration.rawValue) }
+    }
+
+    static var reminderShakeUntilBreak: Bool {
+        reminderShakeMode == "until_break"
+    }
+
+    static var reminderShakeDuration: Double {
+        Double(reminderShakeMode) ?? 0.4
+    }
+
+    // MARK: - Color Indicators
+
+    static var colorBeforeBreakEnabled: Bool {
+        get { defaults.object(forKey: Key.colorBeforeBreakEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.colorBeforeBreakEnabled.rawValue) }
+    }
+
+    /// Hex color string for "before break" color. Default green.
+    static var colorBeforeBreak: String {
+        get { defaults.string(forKey: Key.colorBeforeBreak.rawValue) ?? "#34C759" }
+        set { defaults.set(newValue, forKey: Key.colorBeforeBreak.rawValue) }
+    }
+
+    static var colorAfterBreakEnabled: Bool {
+        get { defaults.object(forKey: Key.colorAfterBreakEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.colorAfterBreakEnabled.rawValue) }
+    }
+
+    /// Hex color string for "after break" color. Default red.
+    static var colorAfterBreak: String {
+        get { defaults.string(forKey: Key.colorAfterBreak.rawValue) ?? "#FF3B30" }
+        set { defaults.set(newValue, forKey: Key.colorAfterBreak.rawValue) }
+    }
+
+    // MARK: - Restore Defaults
+
+    static func restoreDefaults() {
+        for key in Key.allCases {
+            defaults.removeObject(forKey: key.rawValue)
+        }
+    }
+
+    // MARK: - System Sounds
+
+    static var availableSystemSounds: [String] {
+        let soundsDir = "/System/Library/Sounds"
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: soundsDir) else { return [] }
+        return files
+            .filter { $0.hasSuffix(".aiff") }
+            .map { $0.replacingOccurrences(of: ".aiff", with: "") }
+            .sorted()
     }
 }

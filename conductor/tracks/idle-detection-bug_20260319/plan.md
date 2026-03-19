@@ -3,7 +3,7 @@
 **Track ID:** idle-detection-bug_20260319
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-19
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
