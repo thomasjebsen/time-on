@@ -13,6 +13,6 @@ let package = Package(
                 .linkedFramework("IOKit"),
                 .linkedFramework("UserNotifications"),
             ]
-        )
+        ),
     ]
 )

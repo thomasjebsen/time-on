@@ -1,0 +1,16 @@
+{
+  "id": "idle-detection-bug_20260319",
+  "title": "Idle Detection Unreliable — Timer Resets During Active Use",
+  "type": "bug",
+  "status": "pending",
+  "created": "2026-03-19T00:00:00Z",
+  "updated": "2026-03-19T00:00:00Z",
+  "phases": {
+    "total": 2,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 6,
+    "completed": 0
+  }
+}

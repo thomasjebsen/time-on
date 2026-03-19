@@ -1,0 +1,36 @@
+{
+  "status": "complete",
+  "project_type": "brownfield",
+  "current_section": "complete",
+  "current_question": 0,
+  "completed_sections": ["product", "guidelines", "tech_stack", "workflow", "styleguides"],
+  "answers": {
+    "project_name": "Time On",
+    "description": "A macOS menu bar app that helps you stay aware of your active session time and keeps the computer awake if needed",
+    "problem": "It's easy to lose track of how long you've been working, leading to poor time awareness and burnout. Prevent Mac sleeping for long running jobs and presentations",
+    "target_users": "Anyone who needs to track active work sessions and prevent Mac sleep",
+    "goals": "Simple unobtrusive time awareness; reliable keep-awake; nice extras like emoji customization and history",
+    "voice_tone": "Concise and direct",
+    "design_principles": "Lightweight and unobtrusive",
+    "language": "Swift (SPM)",
+    "frontend_framework": "AppKit (agnostic)",
+    "database": "No strong opinion",
+    "infrastructure": "Homebrew Cask + GitHub Releases",
+    "tdd_strictness": "moderate",
+    "commit_strategy": "descriptive",
+    "code_review": "optional",
+    "verification_checkpoints": "track_completion",
+    "style_guides": ["swift"]
+  },
+  "files_created": [
+    "conductor/index.md",
+    "conductor/product.md",
+    "conductor/product-guidelines.md",
+    "conductor/tech-stack.md",
+    "conductor/workflow.md",
+    "conductor/tracks.md",
+    "conductor/code_styleguides/swift.md"
+  ],
+  "started_at": "2026-03-19T00:00:00Z",
+  "last_updated": "2026-03-19T00:00:00Z"
+}
