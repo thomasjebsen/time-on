@@ -21,20 +21,23 @@ final class StatusBarController: NSObject {
 
         setupButton()
 
-        sessionManager.onUpdate = { [weak self] formatted, _ in
-            DispatchQueue.main.async { self?.updateDisplay(formatted) }
+        sessionManager.onUpdate = { [weak self] formatted, _, isOverdue in
+            DispatchQueue.main.async { self?.updateDisplay(formatted, isOverdue: isOverdue) }
         }
 
         sessionManager.onBreakReminder = { [weak self] in
+            self?.playReminderSound()
             self?.shakeMenuBarIcon()
         }
 
         sessionManager.onSessionStateChanged = { [weak self] in
-            DispatchQueue.main.async { self?.updateDisplay(self?.lastFormatted ?? "0m") }
+            DispatchQueue.main.async { self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: false) }
         }
 
         caffeineManager.onStateChanged = { [weak self] _ in
-            DispatchQueue.main.async { self?.updateDisplay(self?.lastFormatted ?? "0m") }
+            DispatchQueue.main.async {
+                self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: self?.sessionManager.isOverdue ?? false)
+            }
         }
     }
 
@@ -183,6 +186,12 @@ final class StatusBarController: NSObject {
         resetItem.target = self
         menu.addItem(resetItem)
 
+        if Preferences.reminderEnabled && sessionManager.isOverdue {
+            let resetBreakItem = NSMenuItem(title: "I took a break", action: #selector(resetBreakTimer), keyEquivalent: "")
+            resetBreakItem.target = self
+            menu.addItem(resetBreakItem)
+        }
+
         if sessionManager.canContinueLastSession {
             let continueItem = NSMenuItem(title: "Continue last session", action: #selector(continueLastSession), keyEquivalent: "")
             continueItem.target = self
@@ -221,25 +230,70 @@ final class StatusBarController: NSObject {
 
     // MARK: - Display
 
-    private func updateDisplay(_ formatted: String) {
+    private func updateDisplay(_ formatted: String, isOverdue: Bool = false) {
         lastFormatted = formatted
-        if let button = statusItem.button {
-            if caffeineManager.isAwake {
-                let indicator = Preferences.awakeIndicator
-                button.title = "\(formatted) \(indicator)"
-            } else {
-                button.title = formatted
-            }
+        guard let button = statusItem.button else { return }
+
+        var displayText = formatted
+        if caffeineManager.isAwake {
+            displayText = "\(formatted) \(Preferences.awakeIndicator)"
+        }
+
+        // Apply color based on break state
+        let color = timerColor(isOverdue: isOverdue)
+        if let color = color {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: color,
+                .font: button.font ?? NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
+            ]
+            button.attributedTitle = NSAttributedString(string: displayText, attributes: attrs)
+        } else {
+            button.attributedTitle = NSAttributedString(string: "")
+            button.title = displayText
         }
     }
 
+    private func timerColor(isOverdue: Bool) -> NSColor? {
+        guard Preferences.reminderEnabled else { return nil }
+
+        if isOverdue && Preferences.colorAfterBreakEnabled {
+            return NSColor(hex: Preferences.colorAfterBreak)
+        } else if !isOverdue && Preferences.colorBeforeBreakEnabled {
+            return NSColor(hex: Preferences.colorBeforeBreak)
+        }
+        return nil
+    }
+
+    // MARK: - Break Reminder Indicators
+
+    private func playReminderSound() {
+        guard Preferences.reminderSoundEnabled else { return }
+        guard let sound = NSSound(named: NSSound.Name(Preferences.reminderSoundName)) else { return }
+        sound.volume = Preferences.reminderSoundVolume
+        sound.play()
+    }
+
     private func shakeMenuBarIcon() {
+        guard Preferences.reminderShakeEnabled else { return }
         guard let button = statusItem.button else { return }
+
         let animation = CAKeyframeAnimation(keyPath: "position.x")
         animation.values = [0, -4, 4, -3, 3, -1, 1, 0] as [CGFloat]
-        animation.duration = 0.4
         animation.isAdditive = true
+        animation.duration = 0.4
+
+        if Preferences.reminderShakeUntilBreak {
+            animation.repeatCount = .greatestFiniteMagnitude
+        } else {
+            let cycles = max(1, Int(Preferences.reminderShakeDuration / 0.4))
+            animation.repeatCount = Float(cycles)
+        }
+
         button.layer?.add(animation, forKey: "shake")
+    }
+
+    func stopShaking() {
+        statusItem.button?.layer?.removeAnimation(forKey: "shake")
     }
 
     // MARK: - Actions
@@ -274,6 +328,11 @@ final class StatusBarController: NSObject {
 
     @objc private func resetTimer() {
         sessionManager.resetSession()
+    }
+
+    @objc private func resetBreakTimer() {
+        sessionManager.resetBreak()
+        stopShaking()
     }
 
     @objc private func continueLastSession() {
@@ -314,5 +373,29 @@ final class StatusBarController: NSObject {
     @objc private func quit() {
         caffeineManager.deactivate()
         NSApp.terminate(nil)
+    }
+}
+
+// MARK: - NSColor hex support
+
+extension NSColor {
+    convenience init?(hex: String) {
+        var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if h.hasPrefix("#") { h.removeFirst() }
+        guard h.count == 6, let val = UInt64(h, radix: 16) else { return nil }
+        self.init(
+            red: CGFloat((val >> 16) & 0xFF) / 255,
+            green: CGFloat((val >> 8) & 0xFF) / 255,
+            blue: CGFloat(val & 0xFF) / 255,
+            alpha: 1.0
+        )
+    }
+
+    var hexString: String {
+        guard let rgb = usingColorSpace(.sRGB) else { return "#000000" }
+        return String(format: "#%02X%02X%02X",
+                      Int(rgb.redComponent * 255),
+                      Int(rgb.greenComponent * 255),
+                      Int(rgb.blueComponent * 255))
     }
 }

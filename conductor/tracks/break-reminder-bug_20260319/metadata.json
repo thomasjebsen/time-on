@@ -1,0 +1,16 @@
+{
+  "id": "break-reminder-bug_20260319",
+  "title": "Break Reminder Never Fires",
+  "type": "bug",
+  "status": "pending",
+  "created": "2026-03-19T00:00:00Z",
+  "updated": "2026-03-19T00:00:00Z",
+  "phases": {
+    "total": 1,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 3,
+    "completed": 0
+  }
+}
