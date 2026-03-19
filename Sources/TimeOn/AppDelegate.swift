@@ -1,10 +1,18 @@
 import Cocoa
 import UserNotifications
 
+@main
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController!
     private var sessionManager: SessionManager!
     private var preferencesWindow: PreferencesWindowController?
+
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         requestNotificationPermission()

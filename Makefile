@@ -4,7 +4,7 @@ BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
 INSTALL_DIR = $(PREFIX)/bin
 
-.PHONY: build clean install uninstall app
+.PHONY: build clean install uninstall app test
 
 build:
 	swift build -c release
@@ -33,3 +33,6 @@ clean:
 
 run: app
 	open "$(APP_BUNDLE)"
+
+test:
+	swift Tests/run_tests.swift

@@ -6,9 +6,11 @@ final class SessionManager {
     private var sessionStart: Date?
     private var lastActiveTime: Date = Date()
     private var totalActiveSeconds: TimeInterval = 0
-    private var isIdle = false
+    private(set) var isIdle = false
     private var lastReminderTime: Date?
     private var enabled = true
+
+    var idleTimeProvider: () -> TimeInterval = IdleDetector.systemIdleTime
 
     var onUpdate: ((String, TimeInterval) -> Void)?
     var onBreakReminder: (() -> Void)?
@@ -107,7 +109,7 @@ final class SessionManager {
         startNewSession()
     }
 
-    private func startNewSession() {
+    func startNewSession() {
         sessionStart = Date()
         lastActiveTime = Date()
         totalActiveSeconds = 0
@@ -115,13 +117,13 @@ final class SessionManager {
         lastReminderTime = Date()
     }
 
-    private func tick() {
-        guard enabled, sessionStart != nil else {
+    func tick() {
+        guard enabled else {
             onUpdate?(formatTime(0), 0)
             return
         }
 
-        let idleSeconds = IdleDetector.systemIdleTime()
+        let idleSeconds = idleTimeProvider()
         let idleThreshold = TimeInterval(Preferences.idleThresholdMinutes * 60)
 
         if idleSeconds >= idleThreshold {
@@ -131,13 +133,14 @@ final class SessionManager {
                 isIdle = true
                 endCurrentSession()
             }
-        } else {
-            if isIdle {
-                // Returning from idle: start a brand new session
-                isIdle = false
-                startNewSession()
-                onSessionStateChanged?()
-            }
+        } else if isIdle {
+            // Returning from idle: start a brand new session
+            isIdle = false
+            startNewSession()
+            onSessionStateChanged?()
+        } else if sessionStart == nil {
+            // Safety: session was ended but not idle — restart
+            startNewSession()
         }
 
         let elapsed: TimeInterval
