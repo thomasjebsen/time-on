@@ -19,6 +19,13 @@ struct Preferences {
     static var colorBeforeBreakEnabled: Bool = false
     static var colorAfterBreakEnabled: Bool = false
 
+    // Pomodoro
+    static var pomodoroWorkMinutes: Int = 25
+    static var pomodoroShortBreakMinutes: Int = 5
+    static var pomodoroLongBreakMinutes: Int = 15
+    static var pomodoroIntervalsUntilLongBreak: Int = 4
+    static var pomodoroBannerEnabled: Bool = true
+
     static func reset() {
         idleThresholdMinutes = 5
         showSeconds = false
@@ -29,6 +36,11 @@ struct Preferences {
         reminderShakeEnabled = true
         colorBeforeBreakEnabled = false
         colorAfterBreakEnabled = false
+        pomodoroWorkMinutes = 25
+        pomodoroShortBreakMinutes = 5
+        pomodoroLongBreakMinutes = 15
+        pomodoroIntervalsUntilLongBreak = 4
+        pomodoroBannerEnabled = true
     }
 }
 
@@ -119,6 +131,67 @@ final class SessionManager {
         let minutes = (totalSeconds % 3600) / 60
         let secs = totalSeconds % 60
         return String(format: "%d:%02d", minutes, secs)
+    }
+
+    // MARK: - Pomodoro
+
+    enum PomodoroPhase { case work, shortBreak, longBreak }
+
+    private(set) var pomodoroActive = false
+    private(set) var pomodoroPhase: PomodoroPhase = .work
+    private var pomodoroPhaseEnd: Date?
+    private var completedWorkIntervals = 0
+    private(set) var pomodoroRemainingSeconds: Int = 0
+
+    var onPomodoroPhaseEnded: ((PomodoroPhase) -> Void)?
+
+    private func durationForPhase(_ phase: PomodoroPhase) -> TimeInterval {
+        switch phase {
+        case .work: return TimeInterval(Preferences.pomodoroWorkMinutes * 60)
+        case .shortBreak: return TimeInterval(Preferences.pomodoroShortBreakMinutes * 60)
+        case .longBreak: return TimeInterval(Preferences.pomodoroLongBreakMinutes * 60)
+        }
+    }
+
+    func startPomodoro() {
+        pomodoroActive = true
+        pomodoroPhase = .work
+        completedWorkIntervals = 0
+        let d = durationForPhase(.work)
+        pomodoroPhaseEnd = Date().addingTimeInterval(d)
+        pomodoroRemainingSeconds = Int(d)
+        onSessionStateChanged?()
+    }
+
+    func stopPomodoro() {
+        pomodoroActive = false
+        pomodoroPhaseEnd = nil
+        onSessionStateChanged?()
+    }
+
+    func skipPomodoroPhase() {
+        advancePomodoroPhase()
+    }
+
+    private func advancePomodoroPhase() {
+        let finished = pomodoroPhase
+        switch pomodoroPhase {
+        case .work:
+            completedWorkIntervals += 1
+            if completedWorkIntervals >= Preferences.pomodoroIntervalsUntilLongBreak {
+                completedWorkIntervals = 0
+                pomodoroPhase = .longBreak
+            } else {
+                pomodoroPhase = .shortBreak
+            }
+        case .shortBreak, .longBreak:
+            pomodoroPhase = .work
+        }
+        let d = durationForPhase(pomodoroPhase)
+        pomodoroPhaseEnd = Date().addingTimeInterval(d)
+        pomodoroRemainingSeconds = Int(d)
+        onPomodoroPhaseEnded?(finished)
+        onSessionStateChanged?()
     }
 }
 
@@ -460,6 +533,74 @@ test("isOverdue is false when reminders disabled") {
     mgr.tick()
 
     assert(!lastOverdue, "Should not be overdue when reminders disabled")
+}
+
+// ─── Pomodoro Tests ───
+
+test("startPomodoro activates and begins with a work phase") {
+    let mgr = SessionManager()
+    assert(!mgr.pomodoroActive, "Should be inactive before start")
+
+    mgr.startPomodoro()
+
+    assert(mgr.pomodoroActive, "Should be active after start")
+    assert(mgr.pomodoroPhase == .work, "Should start in work phase")
+    assert(mgr.pomodoroRemainingSeconds == 25 * 60, "Work phase should be 25 minutes, got \(mgr.pomodoroRemainingSeconds)")
+}
+
+test("stopPomodoro deactivates") {
+    let mgr = SessionManager()
+    mgr.startPomodoro()
+    mgr.stopPomodoro()
+
+    assert(!mgr.pomodoroActive, "Should be inactive after stop")
+}
+
+test("Phase sequence: work -> short break -> work, long break after 4 work intervals") {
+    Preferences.pomodoroIntervalsUntilLongBreak = 4
+
+    let mgr = SessionManager()
+    mgr.startPomodoro()
+
+    // Expected sequence of the phase we land in after each skip, starting from work.
+    let expected: [SessionManager.PomodoroPhase] = [
+        .shortBreak, .work,   // 1st work done
+        .shortBreak, .work,   // 2nd work done
+        .shortBreak, .work,   // 3rd work done
+        .longBreak,  .work,   // 4th work done -> long break, then back to work
+    ]
+
+    for (i, phase) in expected.enumerated() {
+        mgr.skipPomodoroPhase()
+        assert(mgr.pomodoroPhase == phase, "Step \(i): expected \(phase), got \(mgr.pomodoroPhase)")
+    }
+}
+
+test("pomodoroIntervalsUntilLongBreak is respected when changed") {
+    Preferences.pomodoroIntervalsUntilLongBreak = 2
+
+    let mgr = SessionManager()
+    mgr.startPomodoro()
+
+    mgr.skipPomodoroPhase() // work 1 done -> short break
+    assert(mgr.pomodoroPhase == .shortBreak, "After 1st work: short break, got \(mgr.pomodoroPhase)")
+    mgr.skipPomodoroPhase() // short break -> work 2
+    assert(mgr.pomodoroPhase == .work, "Back to work, got \(mgr.pomodoroPhase)")
+    mgr.skipPomodoroPhase() // work 2 done -> long break (2 intervals reached)
+    assert(mgr.pomodoroPhase == .longBreak, "After 2nd work: long break, got \(mgr.pomodoroPhase)")
+}
+
+test("onPomodoroPhaseEnded reports the phase that just finished") {
+    let mgr = SessionManager()
+    mgr.startPomodoro()
+
+    var finishedPhases: [SessionManager.PomodoroPhase] = []
+    mgr.onPomodoroPhaseEnded = { finishedPhases.append($0) }
+
+    mgr.skipPomodoroPhase() // finishes work
+    mgr.skipPomodoroPhase() // finishes short break
+
+    assert(finishedPhases == [.work, .shortBreak], "Expected [work, shortBreak], got \(finishedPhases)")
 }
 
 // ─── Results ───

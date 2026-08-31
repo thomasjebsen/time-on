@@ -12,6 +12,9 @@ final class PreferencesWindowController: NSWindowController {
     private var soundOptions: NSStackView!
     private var shakeOptions: NSStackView!
     private var shakeCustomField: NSTextField!
+    private var pomodoroContent: NSStackView!
+    private var pomodoroPreviewLabel: NSTextField!
+    private var pomodoroPreviewTimer: Timer?
 
     init(sessionManager: SessionManager) {
         self.sessionManager = sessionManager
@@ -28,10 +31,16 @@ final class PreferencesWindowController: NSWindowController {
 
         super.init(window: window)
         setupUI()
+        window.delegate = self
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        startPomodoroPreview()
     }
 
     private func setupUI() {
@@ -199,6 +208,82 @@ final class PreferencesWindowController: NSWindowController {
         breakReminderContent.addArrangedSubview(colorAfterRow)
 
         breakReminderContent.isHidden = !Preferences.reminderEnabled
+
+        addSeparator(to: stackView)
+
+        // ── Pomodoro section ──
+        addLabel("Pomodoro", weight: .bold, size: 13, to: stackView)
+
+        let pomodoroCheck = NSButton(checkboxWithTitle: "Enable Pomodoro", target: self, action: #selector(togglePomodoro(_:)))
+        pomodoroCheck.state = Preferences.pomodoroEnabled ? .on : .off
+        stackView.addArrangedSubview(pomodoroCheck)
+
+        pomodoroContent = makeCollapsibleStack()
+        stackView.addArrangedSubview(pomodoroContent)
+
+        pomodoroContent.addArrangedSubview(makeRow("Work:", fieldValue: "\(Preferences.pomodoroWorkMinutes)", tag: 20, suffix: "minutes"))
+        pomodoroContent.addArrangedSubview(makeRow("Short break:", fieldValue: "\(Preferences.pomodoroShortBreakMinutes)", tag: 21, suffix: "minutes"))
+        pomodoroContent.addArrangedSubview(makeRow("Long break:", fieldValue: "\(Preferences.pomodoroLongBreakMinutes)", tag: 22, suffix: "minutes"))
+        pomodoroContent.addArrangedSubview(makeRow("Long break after:", fieldValue: "\(Preferences.pomodoroIntervalsUntilLongBreak)", tag: 23, suffix: "work intervals"))
+
+        // Indicator style dropdown + live preview
+        let indicatorRow = NSStackView()
+        indicatorRow.orientation = .horizontal
+        indicatorRow.spacing = 8
+        indicatorRow.addArrangedSubview(NSTextField(labelWithString: "Indicator:"))
+        let indicatorPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for style in PomodoroIndicator.all { indicatorPopup.addItem(withTitle: style.name) }
+        if let idx = PomodoroIndicator.all.firstIndex(where: { $0.id == Preferences.pomodoroIndicatorStyle }) {
+            indicatorPopup.selectItem(at: idx)
+        }
+        indicatorPopup.target = self
+        indicatorPopup.action = #selector(pomodoroIndicatorChanged(_:))
+        indicatorPopup.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        indicatorRow.addArrangedSubview(indicatorPopup)
+        pomodoroPreviewLabel = NSTextField(labelWithString: "")
+        pomodoroPreviewLabel.font = .monospacedDigitSystemFont(ofSize: 15, weight: .regular)
+        pomodoroPreviewLabel.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        indicatorRow.addArrangedSubview(pomodoroPreviewLabel)
+        pomodoroContent.addArrangedSubview(indicatorRow)
+
+        // Sound dropdown
+        let pomodoroSoundRow = NSStackView()
+        pomodoroSoundRow.orientation = .horizontal
+        pomodoroSoundRow.spacing = 8
+        pomodoroSoundRow.addArrangedSubview(NSTextField(labelWithString: "Sound:"))
+        let pomodoroSoundPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        pomodoroSoundPopup.addItem(withTitle: "Off")
+        for name in Preferences.availableSystemSounds { pomodoroSoundPopup.addItem(withTitle: name) }
+        if Preferences.pomodoroSoundEnabled {
+            pomodoroSoundPopup.selectItem(withTitle: Preferences.pomodoroSoundName)
+        } else {
+            pomodoroSoundPopup.selectItem(at: 0)
+        }
+        pomodoroSoundPopup.target = self
+        pomodoroSoundPopup.action = #selector(pomodoroSoundChanged(_:))
+        pomodoroSoundPopup.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        pomodoroSoundRow.addArrangedSubview(pomodoroSoundPopup)
+        let pomodoroPreviewBtn = NSButton(title: "Play", target: self, action: #selector(previewPomodoroSound))
+        pomodoroPreviewBtn.bezelStyle = .rounded
+        pomodoroSoundRow.addArrangedSubview(pomodoroPreviewBtn)
+        pomodoroContent.addArrangedSubview(pomodoroSoundRow)
+
+        // Notification dropdown
+        let pomodoroBannerRow = NSStackView()
+        pomodoroBannerRow.orientation = .horizontal
+        pomodoroBannerRow.spacing = 8
+        pomodoroBannerRow.addArrangedSubview(NSTextField(labelWithString: "Notification:"))
+        let pomodoroBannerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        pomodoroBannerPopup.addItem(withTitle: "Off")
+        pomodoroBannerPopup.addItem(withTitle: "On")
+        pomodoroBannerPopup.selectItem(at: Preferences.pomodoroBannerEnabled ? 1 : 0)
+        pomodoroBannerPopup.target = self
+        pomodoroBannerPopup.action = #selector(pomodoroBannerChanged(_:))
+        pomodoroBannerPopup.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        pomodoroBannerRow.addArrangedSubview(pomodoroBannerPopup)
+        pomodoroContent.addArrangedSubview(pomodoroBannerRow)
+
+        pomodoroContent.isHidden = !Preferences.pomodoroEnabled
 
         addSeparator(to: stackView)
 
@@ -466,6 +551,89 @@ final class PreferencesWindowController: NSWindowController {
         Preferences.colorAfterBreak = sender.color.hexString
     }
 
+    // MARK: - Pomodoro Actions
+
+    @objc private func togglePomodoro(_ sender: NSButton) {
+        let on = sender.state == .on
+        Preferences.pomodoroEnabled = on
+        pomodoroContent.isHidden = !on
+        if !on { sessionManager.stopPomodoro() }  // stop any running timer when disabling
+    }
+
+    @objc private func pomodoroSoundChanged(_ sender: NSPopUpButton) {
+        if sender.indexOfSelectedItem == 0 {
+            Preferences.pomodoroSoundEnabled = false
+        } else {
+            Preferences.pomodoroSoundEnabled = true
+            Preferences.pomodoroSoundName = sender.selectedItem?.title ?? "Glass"
+        }
+    }
+
+    @objc private func previewPomodoroSound() {
+        let name = Preferences.pomodoroSoundEnabled ? Preferences.pomodoroSoundName : "Glass"
+        guard let sound = NSSound(named: NSSound.Name(name)) else { return }
+        sound.volume = Preferences.reminderSoundVolume
+        sound.play()
+    }
+
+    @objc private func pomodoroBannerChanged(_ sender: NSPopUpButton) {
+        let enabling = sender.indexOfSelectedItem == 1
+        Preferences.pomodoroBannerEnabled = enabling
+        if enabling { requestNotificationPermissionIfNeeded() }
+    }
+
+    @objc private func pomodoroIndicatorChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0, idx < PomodoroIndicator.all.count else { return }
+        Preferences.pomodoroIndicatorStyle = PomodoroIndicator.all[idx].id
+    }
+
+    // MARK: - Pomodoro Indicator Preview
+
+    private func startPomodoroPreview() {
+        guard pomodoroPreviewTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            self?.renderPomodoroPreview()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pomodoroPreviewTimer = timer
+    }
+
+    private func stopPomodoroPreview() {
+        pomodoroPreviewTimer?.invalidate()
+        pomodoroPreviewTimer = nil
+    }
+
+    private func renderPomodoroPreview() {
+        guard let label = pomodoroPreviewLabel else { return }
+        let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
+        let t = Date().timeIntervalSinceReferenceDate
+        let glyph = style.glyph(at: t, isWork: true)
+        let font = label.font ?? .monospacedDigitSystemFont(ofSize: 15, weight: .regular)
+        let color = style.color(at: t, isWork: true) ?? .labelColor
+        label.attributedStringValue = NSAttributedString(string: glyph, attributes: [.font: font, .foregroundColor: color])
+    }
+
+    private func requestNotificationPermissionIfNeeded() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                switch settings.authorizationStatus {
+                case .notDetermined:
+                    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                        if !granted {
+                            DispatchQueue.main.async { self.showNotificationDeniedAlert() }
+                        }
+                    }
+                case .denied:
+                    self.showNotificationDeniedAlert()
+                default:
+                    break
+                }
+            }
+        }
+    }
+
     // MARK: - Stay Awake Actions
 
     @objc private func selectPreset(_ sender: NSButton) {
@@ -491,6 +659,12 @@ final class PreferencesWindowController: NSWindowController {
     }
 }
 
+extension PreferencesWindowController: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        stopPomodoroPreview()
+    }
+}
+
 extension PreferencesWindowController: NSTextFieldDelegate {
     func controlTextDidEndEditing(_ obj: Notification) {
         guard let field = obj.object as? NSTextField else { return }
@@ -504,6 +678,14 @@ extension PreferencesWindowController: NSTextFieldDelegate {
         case 5:
             let val = max(0.1, Double(field.stringValue) ?? 0.4)
             Preferences.reminderShakeMode = String(val)
+        case 20:
+            Preferences.pomodoroWorkMinutes = max(1, field.integerValue)
+        case 21:
+            Preferences.pomodoroShortBreakMinutes = max(1, field.integerValue)
+        case 22:
+            Preferences.pomodoroLongBreakMinutes = max(1, field.integerValue)
+        case 23:
+            Preferences.pomodoroIntervalsUntilLongBreak = max(1, field.integerValue)
         default:
             break
         }

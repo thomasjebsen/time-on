@@ -24,6 +24,16 @@ struct Preferences {
         case colorBeforeBreak
         case colorAfterBreakEnabled
         case colorAfterBreak
+        // Pomodoro
+        case pomodoroEnabled
+        case pomodoroWorkMinutes
+        case pomodoroShortBreakMinutes
+        case pomodoroLongBreakMinutes
+        case pomodoroIntervalsUntilLongBreak
+        case pomodoroSoundEnabled
+        case pomodoroSoundName
+        case pomodoroBannerEnabled
+        case pomodoroIndicatorStyle
     }
 
     // Preset indicator styles
@@ -162,6 +172,66 @@ struct Preferences {
     static var colorAfterBreak: String {
         get { defaults.string(forKey: Key.colorAfterBreak.rawValue) ?? "#FF3B30" }
         set { defaults.set(newValue, forKey: Key.colorAfterBreak.rawValue) }
+    }
+
+    // MARK: - Pomodoro
+
+    static var pomodoroEnabled: Bool {
+        get { defaults.object(forKey: Key.pomodoroEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.pomodoroEnabled.rawValue) }
+    }
+
+    static var pomodoroWorkMinutes: Int {
+        get {
+            let val = defaults.integer(forKey: Key.pomodoroWorkMinutes.rawValue)
+            return val > 0 ? val : 25
+        }
+        set { defaults.set(newValue, forKey: Key.pomodoroWorkMinutes.rawValue) }
+    }
+
+    static var pomodoroShortBreakMinutes: Int {
+        get {
+            let val = defaults.integer(forKey: Key.pomodoroShortBreakMinutes.rawValue)
+            return val > 0 ? val : 5
+        }
+        set { defaults.set(newValue, forKey: Key.pomodoroShortBreakMinutes.rawValue) }
+    }
+
+    static var pomodoroLongBreakMinutes: Int {
+        get {
+            let val = defaults.integer(forKey: Key.pomodoroLongBreakMinutes.rawValue)
+            return val > 0 ? val : 15
+        }
+        set { defaults.set(newValue, forKey: Key.pomodoroLongBreakMinutes.rawValue) }
+    }
+
+    static var pomodoroIntervalsUntilLongBreak: Int {
+        get {
+            let val = defaults.integer(forKey: Key.pomodoroIntervalsUntilLongBreak.rawValue)
+            return val > 0 ? val : 4
+        }
+        set { defaults.set(newValue, forKey: Key.pomodoroIntervalsUntilLongBreak.rawValue) }
+    }
+
+    static var pomodoroSoundEnabled: Bool {
+        get { defaults.object(forKey: Key.pomodoroSoundEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.pomodoroSoundEnabled.rawValue) }
+    }
+
+    static var pomodoroSoundName: String {
+        get { defaults.string(forKey: Key.pomodoroSoundName.rawValue) ?? "Glass" }
+        set { defaults.set(newValue, forKey: Key.pomodoroSoundName.rawValue) }
+    }
+
+    static var pomodoroBannerEnabled: Bool {
+        get { defaults.object(forKey: Key.pomodoroBannerEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.pomodoroBannerEnabled.rawValue) }
+    }
+
+    /// Identifier of the selected Pomodoro menu-bar indicator style (see `PomodoroIndicator`).
+    static var pomodoroIndicatorStyle: String {
+        get { defaults.string(forKey: Key.pomodoroIndicatorStyle.rawValue) ?? "pulse" }
+        set { defaults.set(newValue, forKey: Key.pomodoroIndicatorStyle.rawValue) }
     }
 
     // MARK: - Restore Defaults

@@ -34,6 +34,10 @@ final class StatusBarController: NSObject {
             DispatchQueue.main.async { self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: false) }
         }
 
+        sessionManager.onPomodoroPhaseEnded = { [weak self] _ in
+            self?.playPomodoroSound()
+        }
+
         caffeineManager.onStateChanged = { [weak self] _ in
             DispatchQueue.main.async {
                 self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: self?.sessionManager.isOverdue ?? false)
@@ -42,6 +46,8 @@ final class StatusBarController: NSObject {
     }
 
     private var lastFormatted = "0m"
+    private var lastOverdue = false
+    private var pomodoroAnimTimer: Timer?
 
     private func setupButton() {
         if let button = statusItem.button {
@@ -200,6 +206,25 @@ final class StatusBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        // — Pomodoro — (also show while running, so an active timer stays stoppable)
+        if Preferences.pomodoroEnabled || sessionManager.pomodoroActive {
+            addSectionHeader("Pomodoro", to: menu)
+            if sessionManager.pomodoroActive {
+                addInfoLine("\(sessionManager.pomodoroPhaseLabel)\u{2009}—\u{2009}\(sessionManager.pomodoroDisplay) left", to: menu)
+                let stopItem = NSMenuItem(title: "Stop Pomodoro", action: #selector(stopPomodoro), keyEquivalent: "")
+                stopItem.target = self
+                menu.addItem(stopItem)
+                let skipItem = NSMenuItem(title: "Skip to next phase", action: #selector(skipPomodoro), keyEquivalent: "")
+                skipItem.target = self
+                menu.addItem(skipItem)
+            } else {
+                let startItem = NSMenuItem(title: "Start Pomodoro", action: #selector(startPomodoro), keyEquivalent: "")
+                startItem.target = self
+                menu.addItem(startItem)
+            }
+            menu.addItem(NSMenuItem.separator())
+        }
+
         let historyItem = NSMenuItem(title: "History...", action: #selector(showHistory), keyEquivalent: "")
         historyItem.target = self
         menu.addItem(historyItem)
@@ -232,24 +257,63 @@ final class StatusBarController: NSObject {
 
     private func updateDisplay(_ formatted: String, isOverdue: Bool = false) {
         lastFormatted = formatted
-        guard let button = statusItem.button else { return }
+        lastOverdue = isOverdue
+        renderTitle()
+        updatePomodoroAnimation()
+    }
 
-        var displayText = formatted
+    /// Composes and applies the menu-bar title from cached state + the current animation frame.
+    private func renderTitle() {
+        guard let button = statusItem.button else { return }
+        let font = button.font ?? NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        let titleColor = timerColor(isOverdue: lastOverdue)
+
+        var text = lastFormatted
         if caffeineManager.isAwake {
-            displayText = "\(formatted) \(Preferences.awakeIndicator)"
+            text += " \(Preferences.awakeIndicator)"
         }
 
-        // Apply color based on break state
-        let color = timerColor(isOverdue: isOverdue)
-        if let color = color {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .foregroundColor: color,
-                .font: button.font ?? NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
-            ]
-            button.attributedTitle = NSAttributedString(string: displayText, attributes: attrs)
-        } else {
+        // Fast path: no custom color and no Pomodoro → plain title (keeps menu-open inversion).
+        if titleColor == nil && !sessionManager.pomodoroActive {
             button.attributedTitle = NSAttributedString(string: "")
-            button.title = displayText
+            button.title = text
+            return
+        }
+
+        let baseColor = titleColor ?? .labelColor
+        let baseAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: baseColor]
+        let result = NSMutableAttributedString(string: text, attributes: baseAttrs)
+
+        if sessionManager.pomodoroActive {
+            let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
+            let isWork = sessionManager.pomodoroPhase == .work
+            let t = Date().timeIntervalSinceReferenceDate
+            let glyph = style.glyph(at: t, isWork: isWork)
+            let iconColor = style.color(at: t, isWork: isWork) ?? baseColor
+
+            result.append(NSAttributedString(string: " ", attributes: baseAttrs))
+            result.append(NSAttributedString(string: glyph, attributes: [.font: font, .foregroundColor: iconColor]))
+            result.append(NSAttributedString(string: " \(sessionManager.pomodoroDisplay)", attributes: baseAttrs))
+        }
+
+        button.attributedTitle = result
+    }
+
+    /// Starts/stops the redraw timer that drives the animated Pomodoro indicator.
+    private func updatePomodoroAnimation() {
+        let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
+        let shouldAnimate = sessionManager.pomodoroActive && style.isAnimated
+        if shouldAnimate {
+            if pomodoroAnimTimer == nil {
+                let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+                    self?.renderTitle()
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                pomodoroAnimTimer = timer
+            }
+        } else {
+            pomodoroAnimTimer?.invalidate()
+            pomodoroAnimTimer = nil
         }
     }
 
@@ -269,6 +333,13 @@ final class StatusBarController: NSObject {
     private func playReminderSound() {
         guard Preferences.reminderSoundEnabled else { return }
         guard let sound = NSSound(named: NSSound.Name(Preferences.reminderSoundName)) else { return }
+        sound.volume = Preferences.reminderSoundVolume
+        sound.play()
+    }
+
+    private func playPomodoroSound() {
+        guard Preferences.pomodoroSoundEnabled else { return }
+        guard let sound = NSSound(named: NSSound.Name(Preferences.pomodoroSoundName)) else { return }
         sound.volume = Preferences.reminderSoundVolume
         sound.play()
     }
@@ -337,6 +408,18 @@ final class StatusBarController: NSObject {
 
     @objc private func continueLastSession() {
         sessionManager.continueLastSession()
+    }
+
+    @objc private func startPomodoro() {
+        sessionManager.startPomodoro()
+    }
+
+    @objc private func stopPomodoro() {
+        sessionManager.stopPomodoro()
+    }
+
+    @objc private func skipPomodoro() {
+        sessionManager.skipPomodoroPhase()
     }
 
     @objc private func showHistory() {

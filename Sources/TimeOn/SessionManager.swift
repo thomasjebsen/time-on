@@ -19,6 +19,19 @@ final class SessionManager {
     var onBreakReminder: (() -> Void)?
     var onSessionStateChanged: (() -> Void)?
 
+    /// Fired when a Pomodoro phase ends, passing the phase that just finished.
+    var onPomodoroPhaseEnded: ((PomodoroPhase) -> Void)?
+
+    // MARK: - Pomodoro state
+
+    enum PomodoroPhase { case work, shortBreak, longBreak }
+
+    private(set) var pomodoroActive = false
+    private(set) var pomodoroPhase: PomodoroPhase = .work
+    private var pomodoroPhaseEnd: Date?          // wall-clock end of current phase
+    private var completedWorkIntervals = 0
+    private(set) var pomodoroRemainingSeconds: Int = 0
+
     /// Previous session info for display in menu.
     private(set) var previousSessionStart: Date?
     private(set) var previousSessionEnd: Date?
@@ -127,6 +140,9 @@ final class SessionManager {
     }
 
     func tick() {
+        // Pomodoro is wall-clock and independent of the activity timer / idle state.
+        updatePomodoro()
+
         guard enabled else {
             onUpdate?(formatTime(0), 0, false)
             return
@@ -186,6 +202,110 @@ final class SessionManager {
 
         let request = UNNotificationRequest(
             identifier: "breakReminder-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - Pomodoro
+
+    /// Countdown string for the current phase, e.g. "24:15".
+    var pomodoroDisplay: String {
+        let secs = max(0, pomodoroRemainingSeconds)
+        return String(format: "%d:%02d", secs / 60, secs % 60)
+    }
+
+    /// Human-readable label for the current phase (menu).
+    var pomodoroPhaseLabel: String {
+        switch pomodoroPhase {
+        case .work: return "Work"
+        case .shortBreak: return "Short break"
+        case .longBreak: return "Long break"
+        }
+    }
+
+    func startPomodoro() {
+        pomodoroActive = true
+        pomodoroPhase = .work
+        completedWorkIntervals = 0
+        let d = durationForPhase(.work)
+        pomodoroPhaseEnd = Date().addingTimeInterval(d)
+        pomodoroRemainingSeconds = Int(d)
+        onSessionStateChanged?()
+    }
+
+    func stopPomodoro() {
+        pomodoroActive = false
+        pomodoroPhaseEnd = nil
+        onSessionStateChanged?()
+    }
+
+    func skipPomodoroPhase() {
+        guard pomodoroActive else { return }
+        advancePomodoroPhase()
+    }
+
+    private func durationForPhase(_ phase: PomodoroPhase) -> TimeInterval {
+        switch phase {
+        case .work: return TimeInterval(Preferences.pomodoroWorkMinutes * 60)
+        case .shortBreak: return TimeInterval(Preferences.pomodoroShortBreakMinutes * 60)
+        case .longBreak: return TimeInterval(Preferences.pomodoroLongBreakMinutes * 60)
+        }
+    }
+
+    private func updatePomodoro() {
+        guard pomodoroActive, let end = pomodoroPhaseEnd else { return }
+        let remaining = end.timeIntervalSinceNow
+        if remaining <= 0 {
+            advancePomodoroPhase()
+        } else {
+            pomodoroRemainingSeconds = Int(ceil(remaining))
+        }
+    }
+
+    private func advancePomodoroPhase() {
+        let finished = pomodoroPhase
+        switch pomodoroPhase {
+        case .work:
+            completedWorkIntervals += 1
+            if completedWorkIntervals >= Preferences.pomodoroIntervalsUntilLongBreak {
+                completedWorkIntervals = 0
+                pomodoroPhase = .longBreak
+            } else {
+                pomodoroPhase = .shortBreak
+            }
+        case .shortBreak, .longBreak:
+            pomodoroPhase = .work
+        }
+        let d = durationForPhase(pomodoroPhase)
+        pomodoroPhaseEnd = Date().addingTimeInterval(d)
+        pomodoroRemainingSeconds = Int(d)
+        sendPomodoroNotification(next: pomodoroPhase)
+        onPomodoroPhaseEnded?(finished)
+        onSessionStateChanged?()
+    }
+
+    private func sendPomodoroNotification(next: PomodoroPhase) {
+        guard Preferences.pomodoroBannerEnabled else { return }
+
+        let content = UNMutableNotificationContent()
+        switch next {
+        case .work:
+            content.title = "Break over"
+            content.body = "Time to get back to work."
+        case .shortBreak:
+            content.title = "Time for a break"
+            content.body = "Nice work — take a short break."
+        case .longBreak:
+            content.title = "Time for a long break"
+            content.body = "Set completed — take a long break."
+        }
+        // Sound is handled independently by StatusBarController
+        content.sound = nil
+
+        let request = UNNotificationRequest(
+            identifier: "pomodoro-\(Date().timeIntervalSince1970)",
             content: content,
             trigger: nil
         )
