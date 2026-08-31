@@ -18,7 +18,6 @@ struct Preferences {
         case reminderSoundVolume
         case reminderShakeEnabled
         case reminderShakeDuration
-        case reminderShakeUntilClicked
         // Color indicators
         case colorBeforeBreakEnabled
         case colorBeforeBreak
@@ -112,11 +111,11 @@ struct Preferences {
         set { defaults.set(newValue, forKey: Key.reminderSoundName.rawValue) }
     }
 
-    /// Sound volume 0.0–1.0
+    /// Sound volume 0.0–1.0. Distinguishes "unset" from a deliberate 0 (mute).
     static var reminderSoundVolume: Float {
         get {
-            let val = defaults.float(forKey: Key.reminderSoundVolume.rawValue)
-            return val > 0 ? val : 0.5
+            guard let val = defaults.object(forKey: Key.reminderSoundVolume.rawValue) as? NSNumber else { return 0.5 }
+            return val.floatValue
         }
         set { defaults.set(newValue, forKey: Key.reminderSoundVolume.rawValue) }
     }

@@ -31,7 +31,12 @@ final class StatusBarController: NSObject {
         }
 
         sessionManager.onSessionStateChanged = { [weak self] in
-            DispatchQueue.main.async { self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: false) }
+            DispatchQueue.main.async {
+                // A session reset (idle return, manual reset, continue, wake) clears
+                // the overdue state, so stop any "until break" shake that's running.
+                self?.stopShaking()
+                self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: false)
+            }
         }
 
         caffeineManager.onStateChanged = { [weak self] _ in
@@ -50,6 +55,8 @@ final class StatusBarController: NSObject {
             button.target = self
             button.action = #selector(handleClick)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            // Guarantee layer-backing so the shake animation actually runs.
+            button.wantsLayer = true
         }
     }
 
@@ -366,8 +373,21 @@ final class StatusBarController: NSObject {
         panel.nameFieldStringValue = "timeon-history.\(fileType)"
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            try? self?.sessionManager.exportHistory(to: url, format: format)
+            do {
+                try self?.sessionManager.exportHistory(to: url, format: format)
+            } catch {
+                self?.showExportError(error)
+            }
         }
+    }
+
+    private func showExportError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Export failed"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func quit() {

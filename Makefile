@@ -1,8 +1,6 @@
-PREFIX ?= /usr/local
 APP_NAME = TimeOn
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
-INSTALL_DIR = $(PREFIX)/bin
 
 .PHONY: build clean install uninstall app test
 
@@ -19,7 +17,6 @@ app: build
 	@echo "Built $(APP_BUNDLE)"
 
 install: app
-	mkdir -p "$(INSTALL_DIR)"
 	cp -r "$(APP_BUNDLE)" /Applications/$(APP_NAME).app
 	@echo "Installed to /Applications/$(APP_NAME).app"
 

@@ -33,13 +33,13 @@ Single-target Swift Package Manager project. All source in `Sources/TimeOn/`. No
 ### Component Relationships
 
 ```
-main.swift → AppDelegate (coordinator)
+AppDelegate (@main entry point, coordinator)
                ├── SessionManager (core business logic)
                │     └── IdleDetector (CoreGraphics CGEventSource idle time queries)
                ├── StatusBarController (menu bar UI + context menu)
-               │     └── CaffeineManager (IOKit power assertions)
-               ├── PreferencesWindowController (settings window, lazy)
-               └── HistoryWindowController (session history, lazy)
+               │     ├── CaffeineManager (IOKit power assertions)
+               │     └── HistoryWindowController (session history, lazy)
+               └── PreferencesWindowController (settings window, lazy)
 
 Preferences (static UserDefaults wrapper, used by all components)
 LaunchAtLoginManager (SMAppService wrapper)

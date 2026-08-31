@@ -26,37 +26,46 @@ final class CaffeineManager {
         if isActive { deactivate() }
 
         let reason = "Time On keeping display awake" as CFString
-        let success = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypeNoDisplaySleep as CFString,
+        let result = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
             IOPMAssertionLevel(kIOPMAssertionLevelOn),
             reason,
             &assertionID
         )
 
-        if success == kIOReturnSuccess {
-            isActive = true
+        guard result == kIOReturnSuccess else {
+            // Surface the failure instead of silently leaving "keep awake" off.
+            NSLog("Time On: failed to create power assertion (IOReturn %d)", result)
+            assertionID = 0
+            isActive = false
+            remainingSeconds = nil
+            onStateChanged?(false)
+            return
+        }
 
-            if let duration = duration {
-                remainingSeconds = Int(duration)
-                deactivationTimer?.invalidate()
-                deactivationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-                    guard let self = self else { timer.invalidate(); return }
-                    if let remaining = self.remainingSeconds {
-                        if remaining <= 1 {
-                            self.deactivate()
-                        } else {
-                            self.remainingSeconds = remaining - 1
-                            self.onStateChanged?(true)
-                        }
+        isActive = true
+
+        if let duration = duration {
+            remainingSeconds = Int(duration)
+            deactivationTimer?.invalidate()
+            let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] timer in
+                guard let self = self else { timer.invalidate(); return }
+                if let remaining = self.remainingSeconds {
+                    if remaining <= 1 {
+                        self.deactivate()
+                    } else {
+                        self.remainingSeconds = remaining - 1
+                        self.onStateChanged?(true)
                     }
                 }
-                RunLoop.main.add(deactivationTimer!, forMode: .common)
-            } else {
-                remainingSeconds = nil
             }
-
-            onStateChanged?(true)
+            deactivationTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        } else {
+            remainingSeconds = nil
         }
+
+        onStateChanged?(true)
     }
 
     func deactivate() {

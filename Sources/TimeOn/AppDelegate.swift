@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         sessionManager.stop()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     private func registerSleepWakeNotifications() {
@@ -35,10 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                          name: NSWorkspace.willSleepNotification, object: nil)
         wsnc.addObserver(self, selector: #selector(systemDidWake),
                          name: NSWorkspace.didWakeNotification, object: nil)
-        wsnc.addObserver(self, selector: #selector(screenDidLock),
-                         name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
-        wsnc.addObserver(self, selector: #selector(screenDidUnlock),
-                         name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+
+        // Screen lock/unlock are distributed notifications, not NSWorkspace
+        // session-active notifications (those fire on fast user switching).
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(self, selector: #selector(screenDidLock),
+                        name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+        dnc.addObserver(self, selector: #selector(screenDidUnlock),
+                        name: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil)
     }
 
     @objc private func systemWillSleep(_ notification: Notification) {

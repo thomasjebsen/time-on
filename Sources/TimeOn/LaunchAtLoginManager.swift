@@ -3,6 +3,12 @@ import ServiceManagement
 
 struct LaunchAtLoginManager {
 
+    /// Whether launch-at-login is available on this OS. SMAppService is macOS 13+.
+    static var isSupported: Bool {
+        if #available(macOS 13.0, *) { return true }
+        return false
+    }
+
     static var isEnabled: Bool {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled

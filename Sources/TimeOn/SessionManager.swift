@@ -10,6 +10,14 @@ final class SessionManager {
     private var lastReminderTime: Date?
     private var enabled = true
 
+    /// True while the machine is asleep or the screen is locked. Distinct from
+    /// `isIdle` (user inactivity) so the tick loop won't start a phantom session
+    /// while suspended.
+    private var suspended = false
+
+    /// Start-of-day the current `todayTotalSeconds` belongs to, for midnight rollover.
+    private var todayAnchor: Date?
+
     var idleTimeProvider: () -> TimeInterval = IdleDetector.systemIdleTime
 
     /// Whether the current session has exceeded the reminder interval.
@@ -81,6 +89,9 @@ final class SessionManager {
 
     func continueLastSession() {
         guard canContinueLastSession else { return }
+        // Undo the previous session's end-accounting so the merged session is
+        // saved to history and added to the today-total exactly once when it ends.
+        rollbackLastSavedSession()
         sessionStart = Date()
         lastActiveTime = Date()
         totalActiveSeconds = lastSessionAccumulated
@@ -90,17 +101,39 @@ final class SessionManager {
         onSessionStateChanged?()
     }
 
-    func handleSleep() {
-        guard enabled, sessionStart != nil else { return }
-        if !isIdle {
-            totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
+    /// Reverses the accounting performed by `endCurrentSession` for the most
+    /// recently ended session (used by "continue last session" to avoid
+    /// double-counting the base duration).
+    private func rollbackLastSavedSession() {
+        todayTotalSeconds = max(0, todayTotalSeconds - lastSessionAccumulated)
+        guard let start = previousSessionStart else { return }
+        let startStr = ISO8601DateFormatter().string(from: start)
+        var history = loadHistory()
+        if let idx = history.lastIndex(where: { $0.date == startStr }) {
+            history.remove(at: idx)
+            if let data = try? JSONEncoder().encode(history) {
+                try? data.write(to: historyFileURL, options: .atomic)
+            }
         }
-        isIdle = true
-        endCurrentSession()
+    }
+
+    func handleSleep() {
+        // The `suspended` latch also de-dupes: sleep and screen-lock can both
+        // fire; only the first ends the session and suspends.
+        guard enabled, !suspended else { return }
+        // Suspend rather than mark idle: while suspended the tick loop won't
+        // restart a session (idle time is low right after a manual lock).
+        suspended = true
+        endCurrentSession() // no-op if there is no active session
     }
 
     func handleWake() {
-        guard enabled else { return }
+        // Only resume if we were actually suspended. This de-dupes wake+unlock
+        // (both fire on a real sleep→wake→unlock) into a single new session, and
+        // makes an unpaired wake a no-op that leaves any active session intact
+        // rather than discarding it.
+        guard enabled, suspended else { return }
+        suspended = false
         isIdle = false
         startNewSession()
         onSessionStateChanged?()
@@ -131,14 +164,26 @@ final class SessionManager {
             onUpdate?(formatTime(0), 0, false)
             return
         }
+        guard !suspended else { return }
+
+        // Roll the today-total over when the calendar day changes.
+        let currentDay = Calendar.current.startOfDay(for: Date())
+        if let anchor = todayAnchor {
+            if currentDay != anchor {
+                loadTodayTotal()
+            }
+        } else {
+            todayAnchor = currentDay
+        }
 
         let idleSeconds = idleTimeProvider()
         let idleThreshold = TimeInterval(Preferences.idleThresholdMinutes * 60)
 
         if idleSeconds >= idleThreshold {
             if !isIdle {
-                // Transition to idle: end current session, start fresh on return
-                totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
+                // Transition to idle: end current session, start fresh on return.
+                // Exclude the idle grace period from the recorded active time.
+                totalActiveSeconds += max(0, Date().timeIntervalSince(lastActiveTime) - idleSeconds)
                 isIdle = true
                 endCurrentSession()
             }
@@ -203,8 +248,10 @@ final class SessionManager {
             return "\(h), \(m)"
         } else if hours > 0 {
             return hours == 1 ? "1 hour" : "\(hours) hours"
+        } else if minutes == 0 {
+            return totalSeconds <= 0 ? "0 minutes" : "less than a minute"
         } else {
-            return minutes <= 1 ? "1 minute" : "\(minutes) minutes"
+            return minutes == 1 ? "1 minute" : "\(minutes) minutes"
         }
     }
 
@@ -249,7 +296,7 @@ final class SessionManager {
         }
 
         if let data = try? JSONEncoder().encode(history) {
-            try? data.write(to: historyFileURL)
+            try? data.write(to: historyFileURL, options: .atomic)
         }
     }
 
@@ -285,7 +332,7 @@ final class SessionManager {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             let data = try encoder.encode(history)
-            try data.write(to: url)
+            try data.write(to: url, options: .atomic)
         case .csv:
             var csv = "date,duration_seconds,duration_formatted\n"
             for entry in history {
@@ -301,6 +348,7 @@ final class SessionManager {
         let today = calendar.startOfDay(for: Date())
         let formatter = ISO8601DateFormatter()
 
+        todayAnchor = today
         todayTotalSeconds = history
             .filter {
                 guard let date = formatter.date(from: $0.date) else { return false }
