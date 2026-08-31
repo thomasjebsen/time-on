@@ -42,38 +42,26 @@ Both approaches use a **personal Homebrew tap** (a GitHub repo).
 
 5. **Copy and update the cask file**:
    ```sh
-   cp Casks/timeon.rb homebrew-tap/Casks/timeon.rb
+   cp Casks/time-on.rb homebrew-tap/Casks/time-on.rb
    # Edit: replace thomasjebsen and PLACEHOLDER_SHA256
    cd homebrew-tap && git add . && git commit -m "Add TimeOn cask" && git push
    ```
 
 6. **Users install with**:
    ```sh
-   brew install --cask thomasjebsen/tap/timeon
+   brew install --cask thomasjebsen/tap/time-on
    ```
 
 ### Release Automation (GitHub Actions)
 
-Create `.github/workflows/release.yml` in the time-on repo:
+This is already implemented in `.github/workflows/release.yml`. Pushing a `v*`
+tag builds the app, stamps the bundle version from the tag, zips it, computes the
+SHA256, updates this repo's `Casks/time-on.rb` (version + sha256) automatically,
+and publishes the GitHub Release (with the SHA in the release notes).
 
-```yaml
-name: Release
-on:
-  push:
-    tags: ['v*']
-jobs:
-  build:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: make app
-      - run: cd .build/release && zip -r TimeOn.app.zip TimeOn.app
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: .build/release/TimeOn.app.zip
-```
-
-After each release, update the sha256 in the cask file in the tap repo.
+The remaining manual step is syncing the updated `Casks/time-on.rb` into the
+separate `homebrew-tap` repo that users actually install from (cross-repo pushes
+need a token that isn't configured here).
 
 ---
 
@@ -87,7 +75,7 @@ After each release, update the sha256 in the cask file in the tap repo.
    ```sh
    gh repo create homebrew-tap --public
    mkdir -p homebrew-tap/Formula
-   cp Formula/timeon.rb homebrew-tap/Formula/timeon.rb
+   cp Formula/time-on.rb homebrew-tap/Formula/time-on.rb
    ```
 
 3. **Get the SHA256 of the source tarball**:
@@ -99,25 +87,25 @@ After each release, update the sha256 in the cask file in the tap repo.
 
 5. **Users install with**:
    ```sh
-   brew install thomasjebsen/tap/timeon
+   brew install thomasjebsen/tap/time-on
    ```
 
 ---
 
 ## Submitting to Homebrew Core / Homebrew Cask (Official)
 
-For inclusion in the **official Homebrew repositories** (so users can `brew install --cask timeon` without a tap):
+For inclusion in the **official Homebrew repositories** (so users can `brew install --cask time-on` without a tap):
 
 ### Requirements
 - The app must be **notable** (significant user base, press coverage, or GitHub stars)
 - Must have a **stable versioned release** on GitHub
-- The cask must pass `brew audit --cask timeon`
+- The cask must pass `brew audit --cask time-on`
 - Source must be open and the binary must match the source
 
 ### Process
 1. Fork [homebrew-cask](https://github.com/Homebrew/homebrew-cask)
-2. Add `Casks/t/timeon.rb` following their template
-3. Run `brew audit --cask timeon` and `brew style --fix Casks/t/timeon.rb`
+2. Add `Casks/t/time-on.rb` following their template
+3. Run `brew audit --cask time-on` and `brew style --fix Casks/t/time-on.rb`
 4. Open a PR
 
 ### Realistic Timeline
@@ -143,5 +131,5 @@ gh repo create homebrew-tap --public
 # ... add cask with correct sha256 and push
 
 # 4. Users install
-brew install --cask thomasjebsen/tap/timeon
+brew install --cask thomasjebsen/tap/time-on
 ```

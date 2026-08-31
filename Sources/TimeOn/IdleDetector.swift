@@ -9,10 +9,14 @@ struct IdleDetector {
             .mouseMoved,
             .leftMouseDown,
             .rightMouseDown,
+            .otherMouseDown,
             .keyDown,
+            .flagsChanged,      // modifier-only presses (Shift/Cmd/Ctrl/Option/Fn)
             .scrollWheel,
             .leftMouseDragged,
             .rightMouseDragged,
+            .otherMouseDragged,
+            .tabletPointer,     // stylus / trackpad tablet input
         ]
 
         var minIdle = Double.greatestFiniteMagnitude

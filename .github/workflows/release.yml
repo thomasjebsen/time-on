@@ -12,6 +12,22 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Stamp bundle version from tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" Resources/Info.plist
 
       - name: Build app
         run: make app
@@ -28,11 +44,26 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "SHA256: $SHA"
 
+      # Keep the in-repo cask in sync automatically (was previously manual and
+      # shipped a placeholder SHA). Best-effort: a failure here must not block the
+      # release — the SHA is also in the release body for manual fallback.
+      - name: Update Homebrew cask
+        continue-on-error: true
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+          sed -i '' -E "s/version \"[^\"]*\"/version \"$VERSION\"/" Casks/time-on.rb
+          sed -i '' -E "s/sha256 \"[^\"]*\"/sha256 \"$SHA\"/" Casks/time-on.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet Casks/time-on.rb; then
+            git add Casks/time-on.rb
+            git commit -m "Update cask to $VERSION"
+            git push origin HEAD:main
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        env:
-          TAG_NAME: ${{ github.ref_name }}
-          SHA256: ${{ steps.sha.outputs.sha256 }}
         with:
           files: .build/release/TimeOn.app.zip
           body: |
@@ -43,3 +74,9 @@ jobs:
             ```
 
             Or download `TimeOn.app.zip`, unzip, and move to `/Applications`.
+
+            ---
+            `TimeOn.app.zip` SHA256: `${{ steps.sha.outputs.sha256 }}`
+
+            > Copy this SHA into the tap's `Casks/time-on.rb` if the automatic
+            > cask update did not run.

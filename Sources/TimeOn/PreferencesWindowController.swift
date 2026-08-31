@@ -333,6 +333,10 @@ final class PreferencesWindowController: NSWindowController {
         addLabel("General", weight: .bold, size: 13, to: stackView)
         let launchCheck = NSButton(checkboxWithTitle: "Launch at login", target: self, action: #selector(toggleLaunchAtLogin(_:)))
         launchCheck.state = LaunchAtLoginManager.isEnabled ? .on : .off
+        if !LaunchAtLoginManager.isSupported {
+            launchCheck.isEnabled = false
+            launchCheck.toolTip = "Requires macOS 13 or later."
+        }
         stackView.addArrangedSubview(launchCheck)
 
         addSeparator(to: stackView)
@@ -655,7 +659,17 @@ final class PreferencesWindowController: NSWindowController {
     // MARK: - General Actions
 
     @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
-        LaunchAtLoginManager.setEnabled(sender.state == .on)
+        let succeeded = LaunchAtLoginManager.setEnabled(sender.state == .on)
+        if !succeeded {
+            // Re-sync the checkbox to the real state and explain the failure.
+            sender.state = LaunchAtLoginManager.isEnabled ? .on : .off
+            let alert = NSAlert()
+            alert.messageText = "Couldn't update Launch at Login"
+            alert.informativeText = "macOS refused the change. You can manage login items in System Settings > General > Login Items."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 }
 

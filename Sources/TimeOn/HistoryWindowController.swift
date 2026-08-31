@@ -76,7 +76,9 @@ final class HistoryWindowController: NSWindowController {
 
         // Stats section
         addStatRow("Days:", stats.totalDays, to: stackView)
-        addStatRow("Total today:", sessionManager.formatTimeLong(stats.totalToday), to: stackView)
+        // Include the in-progress session so this matches the menu bar's "Total today".
+        let totalTodayLive = stats.totalToday + sessionManager.currentSessionSeconds
+        addStatRow("Total today:", sessionManager.formatTimeLong(totalTodayLive), to: stackView)
         addStatRow("Total yesterday:", sessionManager.formatTimeLong(stats.totalYesterday), to: stackView)
         addStatRow("7-day average:", sessionManager.formatTimeLong(stats.sevenDayAverage), to: stackView)
         addStatRow("Weekday average:", sessionManager.formatTimeLong(stats.weekdayAverage), to: stackView)
