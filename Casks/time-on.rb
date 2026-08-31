@@ -9,6 +9,12 @@ cask "time-on" do
 
   app "TimeOn.app"
 
+  caveats <<~EOS
+    #{token} is not signed with an Apple Developer certificate.
+    macOS may show a warning on first launch. To allow it:
+      System Settings → Privacy & Security → scroll down → click "Open Anyway"
+  EOS
+
   zap trash: [
     "~/Library/Application Support/TimeOn",
     "~/Library/Preferences/com.timeon.app.plist",
