@@ -36,6 +36,9 @@ struct IdleDetector {
     static func systemIdleTime() -> TimeInterval { 0 }
 }
 
+// A faithful mirror of the production SessionManager's time-accounting, with an
+// injectable clock (`now`) and in-memory stand-ins for the on-disk history and
+// today-total so the accounting can be tested deterministically.
 final class SessionManager {
     private var sessionStart: Date?
     private var lastActiveTime: Date = Date()
@@ -44,6 +47,21 @@ final class SessionManager {
     private(set) var isOverdue = false
     var lastReminderTime: Date?
     private var enabled = true
+    private var suspended = false
+
+    /// Test-controllable clock. Defaults to the real wall clock.
+    var now: () -> Date = { Date() }
+
+    /// In-memory stand-ins for `history.json` and the running today-total.
+    private(set) var savedSessions: [(start: Date, duration: TimeInterval)] = []
+    private(set) var todayTotalSeconds: TimeInterval = 0
+    private var todayAnchor: Date?
+
+    // Previous session info + "continue" bookkeeping.
+    private(set) var previousSessionStart: Date?
+    private(set) var previousSessionDuration: TimeInterval = 0
+    private var lastSessionEndTime: Date?
+    private var lastSessionAccumulated: TimeInterval = 0
 
     var idleTimeProvider: () -> TimeInterval = IdleDetector.systemIdleTime
     var onUpdate: ((String, TimeInterval, Bool) -> Void)?
@@ -52,19 +70,97 @@ final class SessionManager {
 
     var sessionStartTime: Date? { sessionStart }
 
+    var currentSessionSeconds: TimeInterval {
+        guard sessionStart != nil, !isIdle else { return totalActiveSeconds }
+        return totalActiveSeconds + now().timeIntervalSince(lastActiveTime)
+    }
+
+    var canContinueLastSession: Bool {
+        guard let end = lastSessionEndTime else { return false }
+        return now().timeIntervalSince(end) < 600
+    }
+
+    func start() {
+        loadTodayTotal()
+        startNewSession()
+    }
+
     func startNewSession() {
-        sessionStart = Date()
-        lastActiveTime = Date()
+        sessionStart = now()
+        lastActiveTime = now()
         totalActiveSeconds = 0
         isIdle = false
         isOverdue = false
-        lastReminderTime = Date()
+        lastReminderTime = now()
+    }
+
+    func continueLastSession() {
+        guard canContinueLastSession else { return }
+        // Undo the previous session's end-accounting so the merged session is
+        // saved and counted exactly once when it finally ends.
+        rollbackLastSavedSession()
+        sessionStart = now()
+        lastActiveTime = now()
+        totalActiveSeconds = lastSessionAccumulated
+        isIdle = false
+        lastReminderTime = now()
+        lastSessionEndTime = nil
+        onSessionStateChanged?()
+    }
+
+    private func rollbackLastSavedSession() {
+        todayTotalSeconds = max(0, todayTotalSeconds - lastSessionAccumulated)
+        guard let start = previousSessionStart else { return }
+        if let idx = savedSessions.lastIndex(where: { $0.start == start }) {
+            savedSessions.remove(at: idx)
+        }
+    }
+
+    func resetSession() {
+        endCurrentSession()
+        totalActiveSeconds = 0
+        startNewSession()
+    }
+
+    func resetBreak() {
+        isOverdue = false
+        lastReminderTime = now()
+    }
+
+    func handleSleep() {
+        // The `suspended` latch also de-dupes sleep + screen-lock.
+        guard enabled, !suspended else { return }
+        // Suspend rather than mark idle: while suspended the tick loop won't
+        // spin up a phantom session (idle time is low right after a manual lock).
+        suspended = true
+        endCurrentSession() // no-op if there is no active session
+    }
+
+    func handleWake() {
+        // Only resume if actually suspended: de-dupes wake+unlock and makes an
+        // unpaired wake a no-op that leaves any active session intact.
+        guard enabled, suspended else { return }
+        suspended = false
+        isIdle = false
+        startNewSession()
+        onSessionStateChanged?()
     }
 
     func tick() {
         guard enabled else {
-            onUpdate?("0m", 0, false)
+            onUpdate?("0:00", 0, false)
             return
+        }
+        guard !suspended else { return }
+
+        // Roll the today-total over at midnight.
+        let currentDay = Calendar.current.startOfDay(for: now())
+        if let anchor = todayAnchor {
+            if currentDay != anchor {
+                loadTodayTotal()
+            }
+        } else {
+            todayAnchor = currentDay
         }
 
         let idleSeconds = idleTimeProvider()
@@ -72,7 +168,8 @@ final class SessionManager {
 
         if idleSeconds >= idleThreshold {
             if !isIdle {
-                totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
+                // Exclude the idle grace period from the recorded active time.
+                totalActiveSeconds += max(0, now().timeIntervalSince(lastActiveTime) - idleSeconds)
                 isIdle = true
                 endCurrentSession()
             }
@@ -88,16 +185,16 @@ final class SessionManager {
         if isIdle {
             elapsed = 0
         } else {
-            elapsed = totalActiveSeconds + Date().timeIntervalSince(lastActiveTime)
+            elapsed = totalActiveSeconds + now().timeIntervalSince(lastActiveTime)
         }
 
         // Break reminder check
         if Preferences.reminderEnabled && !isIdle {
             let reminderInterval = TimeInterval(Preferences.reminderIntervalMinutes * 60)
             if let lastReminder = lastReminderTime,
-               Date().timeIntervalSince(lastReminder) >= reminderInterval {
+               now().timeIntervalSince(lastReminder) >= reminderInterval {
                 isOverdue = true
-                lastReminderTime = Date()
+                lastReminderTime = now()
                 onBreakReminder?()
             }
         }
@@ -105,13 +202,55 @@ final class SessionManager {
         onUpdate?(formatTime(elapsed), elapsed, isOverdue)
     }
 
-    private func endCurrentSession() {
+    func endCurrentSession() {
         guard sessionStart != nil else { return }
         if !isIdle {
-            totalActiveSeconds += Date().timeIntervalSince(lastActiveTime)
+            totalActiveSeconds += now().timeIntervalSince(lastActiveTime)
         }
+        saveSession()
+        updateTodayTotal()
+        previousSessionStart = sessionStart
+        previousSessionDuration = totalActiveSeconds
+        lastSessionEndTime = now()
+        lastSessionAccumulated = totalActiveSeconds
         sessionStart = nil
         onSessionStateChanged?()
+    }
+
+    private func saveSession() {
+        guard let start = sessionStart, totalActiveSeconds > 60 else { return }
+        savedSessions.append((start, totalActiveSeconds))
+    }
+
+    private func updateTodayTotal() {
+        todayTotalSeconds += totalActiveSeconds
+    }
+
+    private func loadTodayTotal() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now())
+        todayAnchor = today
+        todayTotalSeconds = savedSessions
+            .filter { cal.isDate($0.start, inSameDayAs: today) }
+            .reduce(0) { $0 + $1.duration }
+    }
+
+    func formatTimeLong(_ seconds: TimeInterval) -> String {
+        let totalSeconds = Int(seconds)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+
+        if hours > 0 && minutes > 0 {
+            let h = hours == 1 ? "1 hour" : "\(hours) hours"
+            let m = minutes == 1 ? "1 minute" : "\(minutes) minutes"
+            return "\(h), \(m)"
+        } else if hours > 0 {
+            return hours == 1 ? "1 hour" : "\(hours) hours"
+        } else if minutes == 0 {
+            return totalSeconds <= 0 ? "0 minutes" : "less than a minute"
+        } else {
+            return minutes == 1 ? "1 minute" : "\(minutes) minutes"
+        }
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -460,6 +599,134 @@ test("isOverdue is false when reminders disabled") {
     mgr.tick()
 
     assert(!lastOverdue, "Should not be overdue when reminders disabled")
+}
+
+// ─── Time Accounting Tests (regressions the old mirror harness could not express) ───
+
+test("Idle-ended session excludes the idle grace period from recorded time") {
+    Preferences.idleThresholdMinutes = 5 // 300s threshold
+    let mgr = SessionManager()
+    var clock = Date(timeIntervalSince1970: 1_000_000)
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 0 }
+    mgr.startNewSession()
+
+    // 15 minutes elapse; the user's last real input was 5 minutes ago (idle threshold hit).
+    clock = clock.addingTimeInterval(15 * 60)
+    mgr.idleTimeProvider = { 300 }
+    mgr.tick()
+
+    assert(mgr.previousSessionDuration == 600,
+           "Recorded active time should be 10min (15min − 5min idle grace), got \(Int(mgr.previousSessionDuration))s")
+}
+
+test("Continuing a session does not double-count today's total or history") {
+    Preferences.idleThresholdMinutes = 5
+    let mgr = SessionManager()
+    var clock = Date(timeIntervalSince1970: 2_000_000)
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 0 }
+
+    mgr.startNewSession()
+    clock = clock.addingTimeInterval(600) // 10 min
+    mgr.endCurrentSession()               // session A saved + counted
+
+    clock = clock.addingTimeInterval(120) // user returns within 10 min
+    mgr.continueLastSession()
+    clock = clock.addingTimeInterval(300) // 5 more min
+    mgr.endCurrentSession()
+
+    assert(mgr.todayTotalSeconds == 900,
+           "Today total should count the merged 15min once, got \(Int(mgr.todayTotalSeconds))s")
+    assert(mgr.savedSessions.map { Int($0.duration) } == [900],
+           "History should hold one merged 15min session, got \(mgr.savedSessions.map { Int($0.duration) })")
+}
+
+test("Today total resets when the day rolls over") {
+    Preferences.idleThresholdMinutes = 5
+    let cal = Calendar.current
+    let mgr = SessionManager()
+    var clock = cal.date(from: DateComponents(year: 2026, month: 6, day: 1, hour: 12, minute: 0))!
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 0 }
+
+    mgr.start()
+    clock = clock.addingTimeInterval(600)
+    mgr.endCurrentSession()               // 10 min saved for June 1
+    mgr.startNewSession()
+    mgr.tick()
+    assert(mgr.todayTotalSeconds == 600, "Same day keeps the total, got \(Int(mgr.todayTotalSeconds))s")
+
+    // Cross midnight into June 2.
+    clock = cal.date(from: DateComponents(year: 2026, month: 6, day: 2, hour: 0, minute: 5))!
+    mgr.tick()
+    assert(mgr.todayTotalSeconds == 0,
+           "Today total should reset after midnight, got \(Int(mgr.todayTotalSeconds))s")
+}
+
+test("formatTimeLong renders sub-minute and zero durations honestly") {
+    let mgr = SessionManager()
+    assert(mgr.formatTimeLong(0) == "0 minutes", "0s → '0 minutes', got '\(mgr.formatTimeLong(0))'")
+    assert(mgr.formatTimeLong(30) == "less than a minute", "30s → 'less than a minute', got '\(mgr.formatTimeLong(30))'")
+    assert(mgr.formatTimeLong(60) == "1 minute", "60s → '1 minute', got '\(mgr.formatTimeLong(60))'")
+    assert(mgr.formatTimeLong(120) == "2 minutes", "120s → '2 minutes', got '\(mgr.formatTimeLong(120))'")
+}
+
+test("Locked/suspended screen does not start a phantom session until wake") {
+    Preferences.idleThresholdMinutes = 5
+    let mgr = SessionManager()
+    let clock = Date(timeIntervalSince1970: 3_000_000)
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 1.0 } // low idle — e.g. a manual lock
+    mgr.startNewSession()
+
+    mgr.handleSleep()               // screen locked / system suspended
+    mgr.tick()                      // a tick fires while suspended
+    assert(mgr.sessionStartTime == nil,
+           "No session should run while suspended/locked")
+
+    mgr.handleWake()
+    assert(mgr.sessionStartTime != nil,
+           "A fresh session should start on wake/unlock")
+}
+
+test("Unpaired wake leaves the active session intact instead of discarding it") {
+    Preferences.idleThresholdMinutes = 5
+    let mgr = SessionManager()
+    var clock = Date(timeIntervalSince1970: 4_000_000)
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 0 }
+    mgr.startNewSession()
+
+    clock = clock.addingTimeInterval(600) // 10 min active
+    mgr.handleWake()                       // wake with no prior sleep — must not discard
+
+    mgr.endCurrentSession()                // a normal end still records the full 10 min
+    assert(mgr.savedSessions.map { Int($0.duration) } == [600],
+           "Unpaired wake must not discard active time, got \(mgr.savedSessions.map { Int($0.duration) })")
+}
+
+test("Duplicate sleep/wake notifications don't spawn extra sessions") {
+    Preferences.idleThresholdMinutes = 5
+    let mgr = SessionManager()
+    var clock = Date(timeIntervalSince1970: 5_000_000)
+    mgr.now = { clock }
+    mgr.idleTimeProvider = { 0 }
+    mgr.start()
+
+    clock = clock.addingTimeInterval(600)
+    mgr.handleSleep()                    // system sleep — ends + suspends
+    assert(mgr.savedSessions.map { Int($0.duration) } == [600], "sleep ends the session once")
+
+    clock = clock.addingTimeInterval(30)
+    mgr.handleSleep()                    // duplicate (screen lock after sleep) — ignored
+    assert(mgr.savedSessions.map { Int($0.duration) } == [600], "duplicate sleep must not end again")
+
+    mgr.handleWake()                     // wake — resume one new session
+    let resumed = mgr.sessionStartTime
+    clock = clock.addingTimeInterval(120)
+    mgr.handleWake()                     // duplicate (unlock after wake) — ignored
+    assert(mgr.sessionStartTime == resumed, "duplicate wake must not restart the session")
 }
 
 // ─── Results ───
