@@ -14,6 +14,12 @@ final class PreferencesWindowController: NSWindowController {
     private var shakeCustomField: NSTextField!
     private var pomodoroContent: NSStackView!
     private var pomodoroPreviewLabel: NSTextField!
+    private var pomodoroSpeedRow: NSStackView!
+    private var pomodoroSpeedCustomBox: NSStackView!
+    private var pomodoroSpeedCustomField: NSTextField!
+    private var pomodoroStaticRow: NSStackView!
+    private var pomodoroStaticField: NSTextField!
+    private var pomodoroColorRow: NSStackView!
     private var pomodoroPreviewTimer: Timer?
 
     init(sessionManager: SessionManager) {
@@ -245,6 +251,70 @@ final class PreferencesWindowController: NSWindowController {
         pomodoroPreviewLabel.widthAnchor.constraint(equalToConstant: 24).isActive = true
         indicatorRow.addArrangedSubview(pomodoroPreviewLabel)
         pomodoroContent.addArrangedSubview(indicatorRow)
+
+        // Animation speed (relevant to animated styles only)
+        pomodoroSpeedRow = NSStackView()
+        pomodoroSpeedRow.orientation = .horizontal
+        pomodoroSpeedRow.spacing = 8
+        pomodoroSpeedRow.addArrangedSubview(NSTextField(labelWithString: "Speed:"))
+        let speedPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for preset in PomodoroIndicator.speedPresets { speedPopup.addItem(withTitle: preset.label) }
+        speedPopup.addItem(withTitle: "Custom…")
+        selectSpeedPopup(speedPopup)
+        speedPopup.target = self
+        speedPopup.action = #selector(pomodoroSpeedChanged(_:))
+        speedPopup.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        pomodoroSpeedRow.addArrangedSubview(speedPopup)
+        // Custom multiplier field, shown only when "Custom…" is selected
+        pomodoroSpeedCustomBox = NSStackView()
+        pomodoroSpeedCustomBox.orientation = .horizontal
+        pomodoroSpeedCustomBox.spacing = 4
+        pomodoroSpeedCustomField = NSTextField(string: String(format: "%g", Preferences.pomodoroIndicatorSpeed))
+        pomodoroSpeedCustomField.tag = 25
+        pomodoroSpeedCustomField.delegate = self
+        pomodoroSpeedCustomField.widthAnchor.constraint(equalToConstant: 50).isActive = true
+        pomodoroSpeedCustomBox.addArrangedSubview(pomodoroSpeedCustomField)
+        pomodoroSpeedCustomBox.addArrangedSubview(NSTextField(labelWithString: "× (higher = slower)"))
+        pomodoroSpeedRow.addArrangedSubview(pomodoroSpeedCustomBox)
+        pomodoroContent.addArrangedSubview(pomodoroSpeedRow)
+
+        // Indicator color (monochrome styles only; emoji/Classic carry their own color)
+        pomodoroColorRow = NSStackView()
+        pomodoroColorRow.orientation = .horizontal
+        pomodoroColorRow.spacing = 8
+        pomodoroColorRow.addArrangedSubview(NSTextField(labelWithString: "Color — Work:"))
+        let workWell = NSColorWell()
+        workWell.color = NSColor(hex: Preferences.pomodoroWorkColor) ?? .systemOrange
+        workWell.target = self
+        workWell.action = #selector(pomodoroWorkColorChanged(_:))
+        workWell.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        workWell.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        pomodoroColorRow.addArrangedSubview(workWell)
+        pomodoroColorRow.addArrangedSubview(NSTextField(labelWithString: "Break:"))
+        let breakWell = NSColorWell()
+        breakWell.color = NSColor(hex: Preferences.pomodoroBreakColor) ?? .systemTeal
+        breakWell.target = self
+        breakWell.action = #selector(pomodoroBreakColorChanged(_:))
+        breakWell.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        breakWell.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        pomodoroColorRow.addArrangedSubview(breakWell)
+        pomodoroContent.addArrangedSubview(pomodoroColorRow)
+
+        // Static-style glyph (relevant to the "Static" style only)
+        pomodoroStaticRow = NSStackView()
+        pomodoroStaticRow.orientation = .horizontal
+        pomodoroStaticRow.spacing = 8
+        pomodoroStaticRow.addArrangedSubview(NSTextField(labelWithString: "Static icon:"))
+        pomodoroStaticField = NSTextField(string: Preferences.pomodoroStaticIcon)
+        pomodoroStaticField.placeholderString = "●"
+        pomodoroStaticField.tag = 24
+        pomodoroStaticField.delegate = self
+        pomodoroStaticField.widthAnchor.constraint(equalToConstant: 60).isActive = true
+        pomodoroStaticRow.addArrangedSubview(pomodoroStaticField)
+        pomodoroStaticRow.addArrangedSubview(NSTextField(labelWithString: "any character or emoji"))
+        pomodoroContent.addArrangedSubview(pomodoroStaticRow)
+
+        updateIndicatorSubrowVisibility()
 
         // Sound dropdown
         let pomodoroSoundRow = NSStackView()
@@ -590,6 +660,51 @@ final class PreferencesWindowController: NSWindowController {
         let idx = sender.indexOfSelectedItem
         guard idx >= 0, idx < PomodoroIndicator.all.count else { return }
         Preferences.pomodoroIndicatorStyle = PomodoroIndicator.all[idx].id
+        updateIndicatorSubrowVisibility()
+    }
+
+    @objc private func pomodoroSpeedChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        if idx >= 0, idx < PomodoroIndicator.speedPresets.count {
+            Preferences.pomodoroIndicatorSpeed = PomodoroIndicator.speedPresets[idx].value
+        } else {
+            // "Custom…" selected: adopt the custom field's current value.
+            let v = Double(pomodoroSpeedCustomField.stringValue) ?? Preferences.pomodoroIndicatorSpeed
+            Preferences.pomodoroIndicatorSpeed = max(0.2, min(30, v))
+        }
+        updateIndicatorSubrowVisibility()
+    }
+
+    @objc private func pomodoroWorkColorChanged(_ sender: NSColorWell) {
+        Preferences.pomodoroWorkColor = sender.color.hexString
+    }
+
+    @objc private func pomodoroBreakColorChanged(_ sender: NSColorWell) {
+        Preferences.pomodoroBreakColor = sender.color.hexString
+    }
+
+    /// Selects the matching speed preset, or the trailing "Custom…" item.
+    private func selectSpeedPopup(_ popup: NSPopUpButton) {
+        if let idx = PomodoroIndicator.speedPresets.firstIndex(where: { $0.value == Preferences.pomodoroIndicatorSpeed }) {
+            popup.selectItem(at: idx)
+        } else {
+            popup.selectItem(at: PomodoroIndicator.speedPresets.count) // "Custom…"
+        }
+    }
+
+    private func isCustomSpeed() -> Bool {
+        !PomodoroIndicator.speedPresets.contains { $0.value == Preferences.pomodoroIndicatorSpeed }
+    }
+
+    /// Show the sub-rows relevant to the current style/speed: "Speed" for animated
+    /// styles (its Custom field only when a custom value is set), "Color" for
+    /// monochrome styles, and "Static icon" for the static style.
+    private func updateIndicatorSubrowVisibility() {
+        let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
+        pomodoroSpeedRow?.isHidden = !style.isAnimated
+        pomodoroSpeedCustomBox?.isHidden = !isCustomSpeed()
+        pomodoroColorRow?.isHidden = !style.usesColor
+        pomodoroStaticRow?.isHidden = style.id != "static"
     }
 
     // MARK: - Pomodoro Indicator Preview
@@ -611,7 +726,7 @@ final class PreferencesWindowController: NSWindowController {
     private func renderPomodoroPreview() {
         guard let label = pomodoroPreviewLabel else { return }
         let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
-        let t = Date().timeIntervalSinceReferenceDate
+        let t = PomodoroIndicator.animationClock()
         let glyph = style.glyph(at: t, isWork: true)
         let font = label.font ?? .monospacedDigitSystemFont(ofSize: 15, weight: .regular)
         let color = style.color(at: t, isWork: true) ?? .labelColor
@@ -700,6 +815,11 @@ extension PreferencesWindowController: NSTextFieldDelegate {
             Preferences.pomodoroLongBreakMinutes = max(1, field.integerValue)
         case 23:
             Preferences.pomodoroIntervalsUntilLongBreak = max(1, field.integerValue)
+        case 24:
+            let trimmed = field.stringValue.trimmingCharacters(in: .whitespaces)
+            Preferences.pomodoroStaticIcon = trimmed.isEmpty ? "\u{25CF}" : trimmed
+        case 25:
+            Preferences.pomodoroIndicatorSpeed = max(0.2, min(30, Double(field.stringValue) ?? Preferences.pomodoroIndicatorSpeed))
         default:
             break
         }
