@@ -294,7 +294,7 @@ final class StatusBarController: NSObject {
         if sessionManager.pomodoroActive {
             let style = PomodoroIndicator.style(for: Preferences.pomodoroIndicatorStyle)
             let isWork = sessionManager.pomodoroPhase == .work
-            let t = Date().timeIntervalSinceReferenceDate
+            let t = PomodoroIndicator.animationClock()
             let glyph = style.glyph(at: t, isWork: isWork)
             let iconColor = style.color(at: t, isWork: isWork) ?? baseColor
 

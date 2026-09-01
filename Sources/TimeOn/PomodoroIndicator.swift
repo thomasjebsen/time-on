@@ -32,22 +32,38 @@ struct PomodoroIndicator {
     func glyph(at t: TimeInterval, isWork: Bool) -> String {
         switch kind {
         case .pulse: return isWork ? "\u{25CF}" : "\u{25CB}"   // ● / ○
-        case .staticDot: return "\u{25CF}"                     // ●
+        case .staticDot:
+            let custom = Preferences.pomodoroStaticIcon
+            return custom.isEmpty ? "\u{25CF}" : custom        // user-chosen glyph, default ●
         case .classic: return isWork ? "\u{1F345}" : "\u{2615}" // 🍅 / ☕
         case .frames(let f): return f[frameIndex(t, count: f.count)]
         case .emojiFrames(let f): return f[frameIndex(t, count: f.count)]
         }
     }
 
+    /// Whether this style is tinted by the user's work/break color (monochrome
+    /// glyphs). Emoji and Classic carry their own color, so they are never tinted.
+    var usesColor: Bool {
+        switch kind {
+        case .emojiFrames, .classic: return false
+        default: return true
+        }
+    }
+
+    private func phaseColor(isWork: Bool) -> NSColor {
+        let hex = isWork ? Preferences.pomodoroWorkColor : Preferences.pomodoroBreakColor
+        return NSColor(hex: hex) ?? (isWork ? .systemOrange : .systemTeal)
+    }
+
     /// The glyph's foreground color at time `t`, or `nil` to inherit the title color.
     func color(at t: TimeInterval, isWork: Bool) -> NSColor? {
         switch kind {
         case .pulse:
-            // Smooth opacity breath, ~1.4s per cycle.
+            // Smooth opacity breath, ~1.4s per cycle, in the chosen phase color.
             let phase = (sin(t / 1.4 * 2 * .pi) + 1) / 2          // 0…1
-            return NSColor.labelColor.withAlphaComponent(CGFloat(0.2 + 0.8 * phase))
+            return phaseColor(isWork: isWork).withAlphaComponent(CGFloat(0.2 + 0.8 * phase))
         case .staticDot, .frames:
-            return isWork ? .systemOrange : .systemTeal
+            return phaseColor(isWork: isWork)
         case .emojiFrames, .classic:
             return nil
         }
@@ -81,4 +97,22 @@ struct PomodoroIndicator {
     static func style(for id: String) -> PomodoroIndicator {
         all.first { $0.id == id } ?? all[0]
     }
+
+    /// Wall-clock time scaled by the user's speed preference. A larger speed
+    /// value stretches time (slower animation); this feeds both the frame index
+    /// and the pulse breath, so one control governs every style's pace.
+    static func animationClock() -> TimeInterval {
+        Date().timeIntervalSinceReferenceDate / max(0.1, Preferences.pomodoroIndicatorSpeed)
+    }
+
+    /// Speed presets shown in Settings: (label, multiplier). Larger = slower.
+    /// Calibrated so the previous "Very slow" (2.5×) is now "Fast", with slower
+    /// options beyond; "Custom…" in the UI allows any value in between.
+    static let speedPresets: [(label: String, value: Double)] = [
+        ("Very fast", 1.5),
+        ("Fast", 2.5),
+        ("Normal", 4.0),
+        ("Slow", 6.0),
+        ("Very slow", 10.0),
+    ]
 }

@@ -33,6 +33,10 @@ struct Preferences {
         case pomodoroSoundName
         case pomodoroBannerEnabled
         case pomodoroIndicatorStyle
+        case pomodoroIndicatorSpeed
+        case pomodoroStaticIcon
+        case pomodoroWorkColor
+        case pomodoroBreakColor
     }
 
     // Preset indicator styles
@@ -231,6 +235,33 @@ struct Preferences {
     static var pomodoroIndicatorStyle: String {
         get { defaults.string(forKey: Key.pomodoroIndicatorStyle.rawValue) ?? "pulse" }
         set { defaults.set(newValue, forKey: Key.pomodoroIndicatorStyle.rawValue) }
+    }
+
+    /// Animation speed multiplier for the indicator (higher = slower). Default 4.0.
+    static var pomodoroIndicatorSpeed: Double {
+        get {
+            let val = defaults.double(forKey: Key.pomodoroIndicatorSpeed.rawValue)
+            return val > 0 ? val : 4.0
+        }
+        set { defaults.set(newValue, forKey: Key.pomodoroIndicatorSpeed.rawValue) }
+    }
+
+    /// Glyph shown when the indicator style is "Static". Default ●.
+    static var pomodoroStaticIcon: String {
+        get { defaults.string(forKey: Key.pomodoroStaticIcon.rawValue) ?? "\u{25CF}" }
+        set { defaults.set(newValue, forKey: Key.pomodoroStaticIcon.rawValue) }
+    }
+
+    /// Indicator color during a work phase (hex). Default orange.
+    static var pomodoroWorkColor: String {
+        get { defaults.string(forKey: Key.pomodoroWorkColor.rawValue) ?? "#FF9500" }
+        set { defaults.set(newValue, forKey: Key.pomodoroWorkColor.rawValue) }
+    }
+
+    /// Indicator color during a break phase (hex). Default teal.
+    static var pomodoroBreakColor: String {
+        get { defaults.string(forKey: Key.pomodoroBreakColor.rawValue) ?? "#30B0C7" }
+        set { defaults.set(newValue, forKey: Key.pomodoroBreakColor.rawValue) }
     }
 
     // MARK: - Restore Defaults
