@@ -5,7 +5,7 @@ final class StatusBarController: NSObject {
     private let sessionManager: SessionManager
     private let caffeineManager = CaffeineManager()
     private let badge = BadgePanelController()
-    private var historyWindow: HistoryWindowController?
+    private var insightsWindow: InsightsWindowController?
 
     private let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -38,6 +38,7 @@ final class StatusBarController: NSObject {
                 // the overdue state, so stop any "until break" shake that's running.
                 self?.stopShaking()
                 self?.updateDisplay(self?.lastFormatted ?? "0m", isOverdue: false)
+                self?.insightsWindow?.refreshIfVisible()
             }
         }
 
@@ -236,9 +237,9 @@ final class StatusBarController: NSObject {
             menu.addItem(NSMenuItem.separator())
         }
 
-        let historyItem = NSMenuItem(title: "History...", action: #selector(showHistory), keyEquivalent: "")
-        historyItem.target = self
-        menu.addItem(historyItem)
+        let insightsItem = NSMenuItem(title: "Insights...", action: #selector(showInsights), keyEquivalent: "")
+        insightsItem.target = self
+        menu.addItem(insightsItem)
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showPreferences), keyEquivalent: "")
         settingsItem.target = self
@@ -458,12 +459,12 @@ final class StatusBarController: NSObject {
         sessionManager.skipPomodoroPhase()
     }
 
-    @objc private func showHistory() {
-        if historyWindow == nil {
-            historyWindow = HistoryWindowController(sessionManager: sessionManager)
+    @objc private func showInsights() {
+        if insightsWindow == nil {
+            insightsWindow = InsightsWindowController(sessionManager: sessionManager)
         }
-        historyWindow?.refresh()
-        historyWindow?.showWindow(nil)
+        // showWindow refreshes and starts the live-update timer.
+        insightsWindow?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 

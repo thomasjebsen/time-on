@@ -2,7 +2,11 @@ APP_NAME = TimeOn
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
 
-.PHONY: build clean install uninstall app test
+# Pure-Foundation sources compiled directly into the analytics test binary.
+ANALYTICS_SOURCES = Sources/TimeOn/SessionEntry.swift Sources/TimeOn/SessionAnalytics.swift
+ANALYTICS_TEST_BIN = .build/analytics_tests
+
+.PHONY: build clean install uninstall app test test-session test-analytics
 
 build:
 	swift build -c release
@@ -31,5 +35,14 @@ clean:
 run: app
 	open "$(APP_BUNDLE)"
 
-test:
+test: test-session test-analytics
+
+# SessionManager idle/break/pomodoro tests (script with a mirror copy of SessionManager).
+test-session:
 	swift Tests/run_tests.swift
+
+# SessionAnalytics tests compiled against the real source files.
+test-analytics:
+	@mkdir -p .build
+	swiftc -parse-as-library $(ANALYTICS_SOURCES) Tests/analytics_tests.swift -o $(ANALYTICS_TEST_BIN)
+	$(ANALYTICS_TEST_BIN)

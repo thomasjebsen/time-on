@@ -104,7 +104,9 @@ final class SessionManager {
         // Undo the previous session's end-accounting so the merged session is
         // saved to history and added to the today-total exactly once when it ends.
         rollbackLastSavedSession()
-        sessionStart = Date()
+        // Keep the original start so the merged session's saved span (start + duration) stays
+        // honest instead of overshooting into the sessions that follow it.
+        sessionStart = previousSessionStart ?? Date()
         lastActiveTime = Date()
         totalActiveSeconds = lastSessionAccumulated
         isIdle = false
@@ -466,11 +468,6 @@ final class SessionManager {
     private func updateTodayTotal() {
         todayTotalSeconds += totalActiveSeconds
     }
-}
-
-struct SessionEntry: Codable {
-    let date: String
-    let durationSeconds: Int
 }
 
 enum ExportFormat {

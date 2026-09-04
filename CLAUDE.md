@@ -19,7 +19,9 @@ make clean        # Clean .build/
 Requires Swift 5.9+ and macOS 12+. No external dependencies — only system frameworks (Cocoa, CoreGraphics, IOKit, UserNotifications, ServiceManagement).
 
 ```sh
-make test         # Run SessionManager idle detection tests
+make test            # Run both test suites below
+make test-session    # SessionManager idle/break/pomodoro tests (script with a mirror copy of SessionManager)
+make test-analytics  # SessionAnalytics tests, compiled against the real source files
 ```
 
 ## Development Context
@@ -40,11 +42,16 @@ AppDelegate (@main entry point, coordinator)
                ├── StatusBarController (menu bar UI + context menu)
                │     ├── CaffeineManager (IOKit power assertions)
                │     ├── BadgePanelController (drop-down badge under the menu bar icon)
-               │     └── HistoryWindowController (session history, lazy)
+               │     └── InsightsWindowController (analytics dashboard, lazy)
+               │           ├── SessionAnalytics (pure Foundation: history → InsightsSnapshot)
+               │           ├── StatTileView ×3
+               │           ├── BarChartView ×2 (28 days, 24 hours)
+               │           └── DayTimelineView
                └── PreferencesWindowController (settings window, lazy)
 
 Preferences (static UserDefaults wrapper, used by all components)
 LaunchAtLoginManager (SMAppService wrapper)
+ChartSupport (ChartStyle colors, bar paths, HoverChartView base class)
 ```
 
 ### Key Patterns
@@ -54,11 +61,14 @@ LaunchAtLoginManager (SMAppService wrapper)
 - **Idle = session end**: when idle threshold exceeded, session ends and a new one starts on return (not pause/resume)
 - **System events** (sleep/wake/lock/unlock) routed through AppDelegate to SessionManager
 - **Windows** use `isReleasedWhenClosed = false` for reuse
+- **Charts are hand-drawn `NSView`s** (macOS 12 floor rules out Swift Charts); colors come from `ChartStyle` computed properties so they resolve at draw time and survive light/dark switches
+- **`SessionAnalytics` is pure**: no AppKit, UserDefaults, or `Date()` — `now` and `Calendar` are injected, which is what lets `make test-analytics` compile the real file
 
 ### Data
 
 - Preferences: `UserDefaults` via `Preferences.swift` static accessors
-- Session history: `~/Library/Application Support/TimeOn/history.json` — array of `{date, durationSeconds}`, 60-day retention
+- Session history: `~/Library/Application Support/TimeOn/history.json` — array of `{date, durationSeconds}` (`SessionEntry.swift`), 60-day retention, sessions ≤ 60 s never saved
+- Insights derive everything from that file plus the live session. "Continue last session" keeps the original start (since 1.4.0); history written by older versions can hold entries whose `start + duration` overshoots the next session, so `SessionAnalytics.intervals` clips the display span while keeping the seconds
 - Export: JSON or CSV via menu
 
 ## Release
