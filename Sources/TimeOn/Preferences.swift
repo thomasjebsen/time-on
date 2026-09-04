@@ -13,6 +13,7 @@ struct Preferences {
         case defaultAwakeDurationMinutes
         // Break reminder indicators
         case reminderBannerEnabled
+        case reminderPopupEnabled
         case reminderSoundEnabled
         case reminderSoundName
         case reminderSoundVolume
@@ -32,6 +33,7 @@ struct Preferences {
         case pomodoroSoundEnabled
         case pomodoroSoundName
         case pomodoroBannerEnabled
+        case pomodoroPopupEnabled
         case pomodoroIndicatorStyle
         case pomodoroIndicatorSpeed
         case pomodoroStaticIcon
@@ -113,6 +115,12 @@ struct Preferences {
     static var reminderBannerEnabled: Bool {
         get { defaults.object(forKey: Key.reminderBannerEnabled.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.reminderBannerEnabled.rawValue) }
+    }
+
+    /// Show the drop-down badge under the menu-bar icon when a break reminder fires.
+    static var reminderPopupEnabled: Bool {
+        get { defaults.object(forKey: Key.reminderPopupEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.reminderPopupEnabled.rawValue) }
     }
 
     static var reminderSoundEnabled: Bool {
@@ -229,6 +237,12 @@ struct Preferences {
     static var pomodoroBannerEnabled: Bool {
         get { defaults.object(forKey: Key.pomodoroBannerEnabled.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Key.pomodoroBannerEnabled.rawValue) }
+    }
+
+    /// Show the drop-down badge under the menu-bar icon when a Pomodoro phase ends.
+    static var pomodoroPopupEnabled: Bool {
+        get { defaults.object(forKey: Key.pomodoroPopupEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.pomodoroPopupEnabled.rawValue) }
     }
 
     /// Identifier of the selected Pomodoro menu-bar indicator style (see `PomodoroIndicator`).

@@ -69,6 +69,8 @@ After launching, Time On appears in your menu bar showing elapsed active time.
 - Show seconds toggle
 - Default stay awake duration (default: 5 hours)
 - Indicator style picker with custom emoji support
+- Pomodoro timer with configurable work/break lengths and menu bar indicator
+- Per-feature alerts for break reminders and Pomodoro: macOS notification, sound, and a small popup badge that drops down from the menu bar icon (stays until clicked)
 - Launch at login
 
 ## Uninstall

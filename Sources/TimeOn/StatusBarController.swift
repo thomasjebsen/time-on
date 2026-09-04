@@ -4,6 +4,7 @@ final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let sessionManager: SessionManager
     private let caffeineManager = CaffeineManager()
+    private let badge = BadgePanelController()
     private var historyWindow: HistoryWindowController?
 
     private let timeFormatter: DateFormatter = {
@@ -28,6 +29,7 @@ final class StatusBarController: NSObject {
         sessionManager.onBreakReminder = { [weak self] in
             self?.playReminderSound()
             self?.shakeMenuBarIcon()
+            self?.showReminderBadge()
         }
 
         sessionManager.onSessionStateChanged = { [weak self] in
@@ -41,6 +43,7 @@ final class StatusBarController: NSObject {
 
         sessionManager.onPomodoroPhaseEnded = { [weak self] _ in
             self?.playPomodoroSound()
+            self?.showPomodoroBadge()
         }
 
         caffeineManager.onStateChanged = { [weak self] _ in
@@ -67,6 +70,7 @@ final class StatusBarController: NSObject {
     }
 
     @objc private func handleClick() {
+        badge.dismiss()
         guard let event = NSApp.currentEvent else { return }
         if event.type == .rightMouseUp {
             showContextMenu()
@@ -372,6 +376,31 @@ final class StatusBarController: NSObject {
 
     func stopShaking() {
         statusItem.button?.layer?.removeAnimation(forKey: "shake")
+    }
+
+    // MARK: - Popup Badge
+
+    private func showReminderBadge() {
+        guard Preferences.reminderPopupEnabled else { return }
+        let active = sessionManager.formatTime(sessionManager.currentSessionSeconds)
+        showBadge(.breakReminder(activeFor: active))
+    }
+
+    private func showPomodoroBadge() {
+        guard Preferences.pomodoroPopupEnabled else { return }
+        // pomodoroPhase has already advanced to the phase that is starting now.
+        showBadge(.pomodoro(next: sessionManager.pomodoroPhase))
+    }
+
+    /// Shows a badge under the status item regardless of the enabled prefs
+    /// (also used by the Settings "Test" buttons).
+    func showBadge(_ content: BadgeContent) {
+        badge.show(content, anchoredTo: statusItemScreenFrame())
+    }
+
+    private func statusItemScreenFrame() -> CGRect? {
+        guard let button = statusItem.button, let window = button.window else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
     // MARK: - Actions

@@ -36,8 +36,10 @@ Single-target Swift Package Manager project. All source in `Sources/TimeOn/`. No
 AppDelegate (@main entry point, coordinator)
                ├── SessionManager (core business logic)
                │     └── IdleDetector (CoreGraphics CGEventSource idle time queries)
+               ├── NotificationManager (all UserNotifications use: auth, delivery, delegate, logging)
                ├── StatusBarController (menu bar UI + context menu)
                │     ├── CaffeineManager (IOKit power assertions)
+               │     ├── BadgePanelController (drop-down badge under the menu bar icon)
                │     └── HistoryWindowController (session history, lazy)
                └── PreferencesWindowController (settings window, lazy)
 
