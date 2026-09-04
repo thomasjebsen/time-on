@@ -10,9 +10,15 @@ cask "time-on" do
   app "TimeOn.app"
 
   caveats <<~EOS
-    #{token} is not signed with an Apple Developer certificate.
-    macOS may show a warning on first launch. To allow it:
+    #{token} is not signed with an Apple Developer certificate, so macOS may
+    refuse to open it on first launch ("Apple could not verify ...").
+
+    Either allow it once:
       System Settings → Privacy & Security → scroll down → click "Open Anyway"
+
+    Or skip the quarantine flag when installing or upgrading:
+      brew install --cask --no-quarantine thomasjebsen/tap/#{token}
+      brew upgrade --cask --no-quarantine #{token}
   EOS
 
   zap trash: [
