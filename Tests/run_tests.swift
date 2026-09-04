@@ -111,7 +111,7 @@ final class SessionManager {
         // Undo the previous session's end-accounting so the merged session is
         // saved and counted exactly once when it finally ends.
         rollbackLastSavedSession()
-        sessionStart = now()
+        sessionStart = previousSessionStart ?? now()
         lastActiveTime = now()
         totalActiveSeconds = lastSessionAccumulated
         isIdle = false
@@ -781,6 +781,8 @@ test("Continuing a session does not double-count today's total or history") {
            "Today total should count the merged 15min once, got \(Int(mgr.todayTotalSeconds))s")
     assert(mgr.savedSessions.map { Int($0.duration) } == [900],
            "History should hold one merged 15min session, got \(mgr.savedSessions.map { Int($0.duration) })")
+    assert(mgr.savedSessions.first?.start == Date(timeIntervalSince1970: 2_000_000),
+           "Merged session should keep the original start so its span stays honest, got \(String(describing: mgr.savedSessions.first?.start))")
 }
 
 test("Today total resets when the day rolls over") {

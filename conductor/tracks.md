@@ -9,4 +9,6 @@
 
 | [~] | break-reminder-options_20260319 | Configurable Break Reminder Indicators | 2026-03-19 | 2026-03-19 |
 
+| [x] | insights-window_20260904 | Insights Window | 2026-09-04 | 2026-09-04 |
+
 <!-- Tracks registered by /conductor:new-track -->

@@ -9,7 +9,7 @@ A lightweight macOS menu bar app that tracks your active screen time and keeps y
 - Idle detection — automatically resets when you step away
 - Sleep/wake and screen lock awareness
 - Break reminders at configurable intervals
-- Session history with stats (daily averages, totals)
+- Insights window: today vs your usual, the last 4 weeks, when you're active, and a per-day timeline
 - Export history to JSON or CSV
 
 **Stay awake**
@@ -59,7 +59,7 @@ After launching, Time On appears in your menu bar showing elapsed active time.
 - Total active time today
 - Stay awake controls with preset and custom durations
 - Reset timer / continue last session
-- History window with daily breakdown and averages
+- Insights window with today's figures, 4-week trend, daily rhythm and a per-day session timeline
 - Settings and export options
 
 ### Settings
