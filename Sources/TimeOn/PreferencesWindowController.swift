@@ -21,6 +21,11 @@ final class PreferencesWindowController: NSWindowController {
     private var pomodoroStaticField: NSTextField!
     private var pomodoroColorRow: NSStackView!
     private var pomodoroPreviewTimer: Timer?
+    private var reminderPermissionLabel: NSTextField!
+    private var pomodoroPermissionLabel: NSTextField!
+
+    /// Set by AppDelegate; shows a badge under the menu-bar icon (Settings "Test" buttons).
+    var onPreviewPopup: ((BadgeContent) -> Void)?
 
     init(sessionManager: SessionManager) {
         self.sessionManager = sessionManager
@@ -47,6 +52,7 @@ final class PreferencesWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         startPomodoroPreview()
+        refreshNotificationStatus()
     }
 
     private func setupUI() {
@@ -116,6 +122,19 @@ final class PreferencesWindowController: NSWindowController {
         bannerPopup.widthAnchor.constraint(equalToConstant: 120).isActive = true
         bannerRow.addArrangedSubview(bannerPopup)
         breakReminderContent.addArrangedSubview(bannerRow)
+
+        reminderPermissionLabel = makePermissionLabel()
+        breakReminderContent.addArrangedSubview(reminderPermissionLabel)
+
+        // Drop-down badge under the menu-bar icon
+        let reminderTestBtn = NSButton(title: "Test", target: self, action: #selector(previewReminderPopup))
+        reminderTestBtn.bezelStyle = .rounded
+        breakReminderContent.addArrangedSubview(makeOnOffRow(
+            "Popup:",
+            isOn: Preferences.reminderPopupEnabled,
+            action: #selector(reminderPopupChanged(_:)),
+            trailing: reminderTestBtn
+        ))
 
         // Sound dropdown
         let soundRow = NSStackView()
@@ -353,7 +372,21 @@ final class PreferencesWindowController: NSWindowController {
         pomodoroBannerRow.addArrangedSubview(pomodoroBannerPopup)
         pomodoroContent.addArrangedSubview(pomodoroBannerRow)
 
+        pomodoroPermissionLabel = makePermissionLabel()
+        pomodoroContent.addArrangedSubview(pomodoroPermissionLabel)
+
+        // Drop-down badge under the menu-bar icon
+        let pomodoroTestBtn = NSButton(title: "Test", target: self, action: #selector(previewPomodoroPopup))
+        pomodoroTestBtn.bezelStyle = .rounded
+        pomodoroContent.addArrangedSubview(makeOnOffRow(
+            "Popup:",
+            isOn: Preferences.pomodoroPopupEnabled,
+            action: #selector(pomodoroPopupChanged(_:)),
+            trailing: pomodoroTestBtn
+        ))
+
         pomodoroContent.isHidden = !Preferences.pomodoroEnabled
+        refreshNotificationStatus()
 
         addSeparator(to: stackView)
 
@@ -462,6 +495,63 @@ final class PreferencesWindowController: NSWindowController {
         return row
     }
 
+    /// "Label: [Off|On] (trailing)" row, the same shape as the Notification/Sound rows.
+    private func makeOnOffRow(_ label: String, isOn: Bool, action: Selector, trailing: NSView? = nil) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+        row.addArrangedSubview(NSTextField(labelWithString: label))
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.addItem(withTitle: "Off")
+        popup.addItem(withTitle: "On")
+        popup.selectItem(at: isOn ? 1 : 0)
+        popup.target = self
+        popup.action = action
+        popup.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        row.addArrangedSubview(popup)
+        if let trailing { row.addArrangedSubview(trailing) }
+        return row
+    }
+
+    /// Small secondary line that reports the macOS notification permission state.
+    private func makePermissionLabel() -> NSTextField {
+        let label = NSTextField(labelWithString: "System permission: checking…")
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+        label.preferredMaxLayoutWidth = 340
+        return label
+    }
+
+    private func refreshNotificationStatus() {
+        NotificationManager.shared.fetchStatus { [weak self] status, error in
+            guard let self else { return }
+            let text = self.permissionText(status: status, error: error)
+            self.reminderPermissionLabel?.stringValue = text
+            self.pomodoroPermissionLabel?.stringValue = text
+        }
+    }
+
+    private func permissionText(status: UNAuthorizationStatus, error: Error?) -> String {
+        let state: String
+        switch status {
+        case .authorized, .provisional:
+            state = "Authorized. If banners still don't appear, a Focus mode (Do Not Disturb) is probably silencing them: allow Time On in System Settings › Focus."
+        case .denied:
+            state = "Denied — enable in System Settings › Notifications › Time On"
+        case .notDetermined:
+            state = "Not determined — macOS has not shown the permission prompt"
+        default:
+            state = "Unknown"
+        }
+        var text = "System permission: \(state)"
+        if let error {
+            text += "\nLast error: \(error.localizedDescription)"
+        }
+        return text
+    }
+
     private func updatePreview() {
         previewLabel?.stringValue = "Preview: 25m \(Preferences.awakeIndicator)"
     }
@@ -529,25 +619,15 @@ final class PreferencesWindowController: NSWindowController {
         let enabling = sender.indexOfSelectedItem == 1
         Preferences.reminderBannerEnabled = enabling
 
-        if enabling {
-            let center = UNUserNotificationCenter.current()
-            center.getNotificationSettings { settings in
-                DispatchQueue.main.async {
-                    switch settings.authorizationStatus {
-                    case .notDetermined:
-                        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                            if !granted {
-                                DispatchQueue.main.async { self.showNotificationDeniedAlert() }
-                            }
-                        }
-                    case .denied:
-                        self.showNotificationDeniedAlert()
-                    default:
-                        break
-                    }
-                }
-            }
-        }
+        if enabling { requestNotificationPermissionIfNeeded() }
+    }
+
+    @objc private func reminderPopupChanged(_ sender: NSPopUpButton) {
+        Preferences.reminderPopupEnabled = sender.indexOfSelectedItem == 1
+    }
+
+    @objc private func previewReminderPopup() {
+        onPreviewPopup?(.breakReminder(activeFor: "1h 20m"))
     }
 
     private func showNotificationDeniedAlert() {
@@ -656,6 +736,14 @@ final class PreferencesWindowController: NSWindowController {
         if enabling { requestNotificationPermissionIfNeeded() }
     }
 
+    @objc private func pomodoroPopupChanged(_ sender: NSPopUpButton) {
+        Preferences.pomodoroPopupEnabled = sender.indexOfSelectedItem == 1
+    }
+
+    @objc private func previewPomodoroPopup() {
+        onPreviewPopup?(.pomodoro(next: .shortBreak))
+    }
+
     @objc private func pomodoroIndicatorChanged(_ sender: NSPopUpButton) {
         let idx = sender.indexOfSelectedItem
         guard idx >= 0, idx < PomodoroIndicator.all.count else { return }
@@ -734,23 +822,10 @@ final class PreferencesWindowController: NSWindowController {
     }
 
     private func requestNotificationPermissionIfNeeded() {
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                switch settings.authorizationStatus {
-                case .notDetermined:
-                    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                        if !granted {
-                            DispatchQueue.main.async { self.showNotificationDeniedAlert() }
-                        }
-                    }
-                case .denied:
-                    self.showNotificationDeniedAlert()
-                default:
-                    break
-                }
-            }
-        }
+        NotificationManager.shared.ensureAuthorized(
+            onDenied: { [weak self] in self?.showNotificationDeniedAlert() },
+            completion: { [weak self] in self?.refreshNotificationStatus() }
+        )
     }
 
     // MARK: - Stay Awake Actions

@@ -870,6 +870,73 @@ test("Duplicate sleep/wake notifications don't spawn extra sessions") {
     assert(mgr.sessionStartTime == resumed, "duplicate wake must not restart the session")
 }
 
+// Mirror of BadgeGeometry in Sources/TimeOn/BadgePanelController.swift — keep in sync.
+enum BadgeGeometry {
+    static let gapBelowMenuBar: CGFloat = 6
+    static let screenInset: CGFloat = 8
+
+    static func cardFrame(size: CGSize, anchor: CGRect?, visibleFrame vf: CGRect) -> CGRect {
+        var origin: CGPoint
+        if let a = anchor {
+            origin = CGPoint(x: a.midX - size.width / 2, y: a.minY - gapBelowMenuBar - size.height)
+        } else {
+            origin = CGPoint(x: vf.maxX - screenInset - size.width, y: vf.maxY - gapBelowMenuBar - size.height)
+        }
+        origin.x = min(max(origin.x, vf.minX + screenInset), vf.maxX - screenInset - size.width)
+        origin.y = min(max(origin.y, vf.minY + screenInset), vf.maxY - gapBelowMenuBar - size.height)
+        return CGRect(origin: origin, size: size)
+    }
+}
+
+// ─── Badge Geometry Tests ───
+// BadgeGeometry.cardFrame is the pure positioning function used by BadgePanelController.
+
+test("Badge is centred under the status item, hanging 6pt below the menu bar") {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)          // visibleFrame (menu bar excluded)
+    let anchor = CGRect(x: 1200, y: 875, width: 60, height: 22)          // status button, bottom edge = vf.maxY
+    let size = CGSize(width: 220, height: 110)
+    let f = BadgeGeometry.cardFrame(size: size, anchor: anchor, visibleFrame: screen)
+    assert(f.size == size, "size is preserved")
+    assert(f.midX == anchor.midX, "horizontally centred under the anchor (got \(f.midX))")
+    assert(f.maxY == 875 - 6, "top edge sits 6pt below the menu bar (got \(f.maxY))")
+}
+
+test("Badge is clamped inside the screen near the right edge") {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
+    let anchor = CGRect(x: 1400, y: 875, width: 40, height: 22)          // last status item, at the very edge
+    let size = CGSize(width: 220, height: 110)
+    let f = BadgeGeometry.cardFrame(size: size, anchor: anchor, visibleFrame: screen)
+    assert(f.maxX == 1440 - 8, "right edge respects the 8pt inset (got \(f.maxX))")
+    assert(f.minX >= 0, "never off the left edge")
+}
+
+test("Badge stays at the top of the screen when the menu bar is hidden (fullscreen app)") {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)          // no menu bar: visibleFrame is the full screen
+    let anchor = CGRect(x: 1200, y: 910, width: 60, height: 22)          // status bar window slid above the screen
+    let size = CGSize(width: 220, height: 110)
+    let f = BadgeGeometry.cardFrame(size: size, anchor: anchor, visibleFrame: screen)
+    assert(f.maxY == 900 - 6, "clamped to hang from the top edge (got \(f.maxY))")
+    assert(f.midX == anchor.midX, "still centred under where the item is")
+}
+
+test("Badge falls back to the top-right corner without an anchor") {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
+    let size = CGSize(width: 220, height: 110)
+    let f = BadgeGeometry.cardFrame(size: size, anchor: nil, visibleFrame: screen)
+    assert(f.maxX == 1440 - 8, "right inset (got \(f.maxX))")
+    assert(f.maxY == 875 - 6, "top gap (got \(f.maxY))")
+}
+
+test("Badge frame is offset correctly on a secondary display with a non-zero origin") {
+    let screen = CGRect(x: -1920, y: 200, width: 1920, height: 1055)   // display to the left of the main one
+    let anchor = CGRect(x: -300, y: 1255, width: 60, height: 22)
+    let size = CGSize(width: 220, height: 110)
+    let f = BadgeGeometry.cardFrame(size: size, anchor: anchor, visibleFrame: screen)
+    assert(f.midX == anchor.midX, "centred under anchor on the secondary display")
+    assert(f.maxY == 1255 - 6, "hangs below that display's menu bar (got \(f.maxY))")
+    assert(screen.contains(f), "entirely inside the secondary display")
+}
+
 // ─── Results ───
 
 print("")

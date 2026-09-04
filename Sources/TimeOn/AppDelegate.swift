@@ -1,5 +1,4 @@
 import Cocoa
-import UserNotifications
 
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,7 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        requestNotificationPermission()
+        NotificationManager.shared.configure()
+        NotificationManager.shared.requestAuthorization()
         sessionManager = SessionManager()
         statusBarController = StatusBarController(sessionManager: sessionManager)
         statusBarController.onPreferences = { [weak self] in
@@ -63,14 +63,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionManager.handleWake()
     }
 
-    private func requestNotificationPermission() {
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
     private func showPreferences() {
         if preferencesWindow == nil {
             preferencesWindow = PreferencesWindowController(sessionManager: sessionManager)
+            preferencesWindow?.onPreviewPopup = { [weak self] content in
+                self?.statusBarController.showBadge(content)
+            }
         }
         preferencesWindow?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)

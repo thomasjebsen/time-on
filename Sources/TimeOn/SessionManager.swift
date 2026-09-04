@@ -1,5 +1,4 @@
 import Foundation
-import UserNotifications
 
 final class SessionManager {
     private var timer: Timer?
@@ -238,19 +237,12 @@ final class SessionManager {
 
     private func sendBreakReminder(elapsed: TimeInterval) {
         guard Preferences.reminderBannerEnabled else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Time for a break"
-        content.body = "You've been active for \(formatTime(elapsed)). Consider taking a short break."
-        // Sound is handled independently by StatusBarController
-        content.sound = nil
-
-        let request = UNNotificationRequest(
-            identifier: "breakReminder-\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: nil
+        // Sound is handled independently by StatusBarController.
+        NotificationManager.shared.send(
+            title: "Time for a break",
+            body: "You've been active for \(formatTime(elapsed)). Consider taking a short break.",
+            identifierPrefix: "breakReminder"
         )
-        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Pomodoro
@@ -334,27 +326,21 @@ final class SessionManager {
     private func sendPomodoroNotification(next: PomodoroPhase) {
         guard Preferences.pomodoroBannerEnabled else { return }
 
-        let content = UNMutableNotificationContent()
+        let title: String
+        let body: String
         switch next {
         case .work:
-            content.title = "Break over"
-            content.body = "Time to get back to work."
+            title = "Break over"
+            body = "Time to get back to work."
         case .shortBreak:
-            content.title = "Time for a break"
-            content.body = "Nice work — take a short break."
+            title = "Time for a break"
+            body = "Nice work — take a short break."
         case .longBreak:
-            content.title = "Time for a long break"
-            content.body = "Set completed — take a long break."
+            title = "Time for a long break"
+            body = "Set completed — take a long break."
         }
-        // Sound is handled independently by StatusBarController
-        content.sound = nil
-
-        let request = UNNotificationRequest(
-            identifier: "pomodoro-\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
+        // Sound is handled independently by StatusBarController.
+        NotificationManager.shared.send(title: title, body: body, identifierPrefix: "pomodoro")
     }
 
     func formatTimeLong(_ seconds: TimeInterval) -> String {
